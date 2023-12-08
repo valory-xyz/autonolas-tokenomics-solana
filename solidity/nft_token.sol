@@ -22,8 +22,16 @@ contract nft_token {
     bytes public constant pdaProgramSeed = "pdaProgram";
     // PDA bump
     bytes1 public pdaBump;
+    int32 public constant min_tick_lower_index = -443632;
+    int32 public constant max_tick_lower_index = 443632;
     //address constant tokenProgram = address"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
+    uint64 public numTokenAccounts;
+
+    mapping(address => uint64) public mapTokenAccountLiquidity;
+    address[type(uint32).max] public tokenAccounts;
+
+    @space(10000)
     @payer(payer)
     @seed("pdaProgram")
     constructor(
@@ -39,16 +47,15 @@ contract nft_token {
         pdaERC20Account = _pdaERC20Account;
 
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address _pdaProgram, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
+        (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
 
         // Verify that the bump passed to the constructor matches the bump derived from the seeds and programId
-        // This ensures that only the canonical pda address can be used to create the account (first bump that generates a valid pda address)
         if (bump != _bump) {
             revert("Invalid bump");
         }
 
-        pdaBump = _bump;
-        pdaProgram = _pdaProgram;
+        pdaBump = bump;
+        pdaProgram = pda;
     }
 
     function getPositionData(address positionDataAccount, address positionMint) public view returns (Position position) {
@@ -128,11 +135,16 @@ contract nft_token {
             revert("Wrong NFT address");
         }
 
+        // Check tick values
+        if (position.tick_lower_index != min_tick_lower_index || position.tick_upper_index != max_tick_lower_index) {
+            revert("Wrong ticks");
+        }
+
         // Check the PDA ownership
         // TODO: Uncomment following lines in production
-//                if (ai.owner != orca) {
-//                    revert("Wrong pda owner");
-//                }
+//        if (ai.owner != orca) {
+//            revert("Wrong pda owner");
+//        }
 
         // Check the PDA header data
         uint64 header = ai.data.readUint64LE(0);
@@ -143,11 +155,12 @@ contract nft_token {
         // Check the PDA address correctness
         (address pdaPosition, ) = try_find_program_address(["position", position.position_mint], orca);
         // TODO: Uncomment following lines in production
-//                if (pdaPosition != positionDataAccount) {
-//                    revert("Wrong position pda");
-//                }
+//        if (pdaPosition != positionDataAccount) {
+//            revert("Wrong position pda");
+//        }
 
         // TODO: Do the liquidity check for max(uint64) value as it is provided as uint128 from the LP provider
+        uint64 liquidity = uint64(position.liquidity);
 
         // Transfer the NFT to the pdaTokenAccount address of this program
         SplToken.transfer(
@@ -161,9 +174,15 @@ contract nft_token {
             mintErc20,
             tx.accounts.toErc20.key,
             pdaProgram,
-            uint64(position.liquidity),
+            liquidity,
             pdaProgramSeed,
             pdaBump);
+
+        // Record liquidity and its correspondent token account address
+        address tokenAccount = tx.accounts.pdaTokenAccount.key;
+        mapTokenAccountLiquidity[tokenAccount] = liquidity;
+        tokenAccounts[numTokenAccounts] = (tx.accounts.pdaTokenAccount.key);
+        numTokenAccounts++;
     }
 
     @mutableAccount(fromERC20Account)
@@ -175,6 +194,11 @@ contract nft_token {
     @signer(sig)
     // Transfer with PDA
     function withdraw(uint64 amount) external {
+        // Check that the token account exists
+        if (mapTokenAccountLiquidity[tx.accounts.pdaTokenAccount.key] == 0) {
+            revert("No liquidity on a provided token account");
+        }
+
         // Transfer ERC20 tokens to the pdaERC20Account address of this program
         SplToken.transfer(
             tx.accounts.fromERC20Account.key,
@@ -193,6 +217,14 @@ contract nft_token {
 
         // Burn acquired ERC20 tokens
         SplToken.burn_pda(tx.accounts.pdaERC20Account.key, mintErc20, pdaProgram, amount, pdaProgramSeed, pdaBump);
+
+        // TODO: If the remainder of the liquidity is formed into another NFT, update the liquidity
+        uint64 remainder = 0;
+        // Update liquidity and its associated token account
+        address tokenAccount = tx.accounts.pdaTokenAccount.key;
+        mapTokenAccountLiquidity[tokenAccount] = remainder;
+
+        // TODO: Optimize tokenAccounts array such that zero liquidity accounts are either re-utilized, or cleaned
     }
 
 //    @mutableAccount(toErc20)
@@ -211,7 +243,7 @@ contract nft_token {
 //    }
 
     @account(account)
-    function get_balance() external view returns (uint64) {
+    function getBalance() external view returns (uint64) {
         return SplToken.get_balance(tx.accounts.account);
     }
 
