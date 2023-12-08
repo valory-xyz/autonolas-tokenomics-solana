@@ -68,22 +68,16 @@ describe("nft_token", () => {
   });
 
   it.only("NFT wrap and unwrap", async () => {
+    console.log("Program ID", program.programId.toBase58());
+
     // Find a PDA account for the program
     const [pdaProgram, bump] = await anchor.web3.PublicKey.findProgramAddress([Buffer.from("pdaProgram", "utf-8")], program.programId);
     const bumpBytes = Buffer.from(new Uint8Array([bump]));
     console.log("Program PDA:", pdaProgram.toBase58());
 
-    // Airdrop SOL to the PDA
-    let fromAirdropSignature = await provider.connection.requestAirdrop(pdaProgram, anchor.web3.LAMPORTS_PER_SOL);
-    // Wait for airdrop confirmation
-    await provider.connection.confirmTransaction({
-        signature: fromAirdropSignature,
-        ...(await provider.connection.getLatestBlockhash()),
-    });
-
     // Generate a new wallet keypair and airdrop SOL
     const fromWallet = anchor.web3.Keypair.generate();
-    fromAirdropSignature = await provider.connection.requestAirdrop(fromWallet.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+    let fromAirdropSignature = await provider.connection.requestAirdrop(fromWallet.publicKey, anchor.web3.LAMPORTS_PER_SOL);
     // Wait for airdrop confirmation
     await provider.connection.confirmTransaction({
         signature: fromAirdropSignature,
@@ -107,9 +101,8 @@ describe("nft_token", () => {
     console.log("ATA PDA for ERC20:", pdaERC20Account.address.toBase58());
 
     let signature = await program.methods
-      .new(orca, whirlpool, pdaProgram, mintERC20, pdaERC20Account.address)
-      .accounts({ dataAccount: dataAccount.publicKey })
-      .signers([dataAccount])
+      .new(orca, whirlpool, pdaProgram, mintERC20, pdaERC20Account.address, bumpBytes)
+      .accounts({ dataAccount: pdaProgram })
       .rpc();
     //console.log("Your transaction signature", signature);
 
@@ -195,15 +188,14 @@ describe("nft_token", () => {
       .view();
     console.log("NFT holding liquidity amount:", liquidity.toNumber());
 
-    await program.methods.deposit(mint, bumpBytes)
+    await program.methods.deposit(mint)
       .accounts(
           {
-            dataAccount: dataAccount.publicKey,
+            dataAccount: pdaProgram,
             fromTokenAccount: fromTokenAccount.address,
             pdaTokenAccount: pdaTokenAccount.address,
             toErc20: fromERC20Account.address,
             mintERC20: mintERC20,
-            pdaProgram: pdaProgram,
             positionDataAccount: positionDataAccount.publicKey,
             fromWallet: fromWallet.publicKey
           }
@@ -233,16 +225,15 @@ describe("nft_token", () => {
 
     console.log("\nSending ERC20 tokens back to the program in exchange of the NFT");
     // Transfer ERC20 tokens from the user to the program, and the NFT - back to the user
-    signature = await program.methods.withdraw(balance, bumpBytes)
+    signature = await program.methods.withdraw(balance)
       .accounts(
           {
-            dataAccount: dataAccount.publicKey,
+            dataAccount: pdaProgram,
             fromERC20Account: fromERC20Account.address,
             pdaERC20Account: pdaERC20Account.address,
             fromWallet: fromWallet.publicKey,
             pdaTokenAccount: pdaTokenAccount.address,
             fromTokenAccount: fromTokenAccount.address,
-            pdaProgram: pdaProgram,
             mintERC20: mintERC20,
             sig: fromWallet.publicKey
           }

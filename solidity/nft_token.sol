@@ -9,6 +9,7 @@ struct Position {
     int32 tick_upper_index; // 4
 }
 
+@program_id("DPvSokZKEAYqh6jjmGDUyd4L881uAWg4rFVeA6rec2fr")
 contract nft_token {
     address public orca;
     address public whirlpool;
@@ -19,15 +20,40 @@ contract nft_token {
     uint64 public pdaHeader = 0x55bdfe33;//0xd0f7407ae48fbcaa;
     // PDA seed
     bytes public constant pdaProgramSeed = "pdaProgram";
+    // PDA bump
+    bytes1 public pdaBump;
     //address constant tokenProgram = address"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
     @payer(payer)
-    constructor(address _orca, address _whirlpool, address _pdaProgram, address _mintErc20, address _pdaERC20Account) {
+    @seed("pdaProgram")
+    constructor(
+        address _orca,
+        address _whirlpool,
+        address _pdaProgram,
+        address _mintErc20,
+        address _pdaERC20Account,
+        @bump bytes1 _bump
+    ) {
         orca = _orca;
         whirlpool = _whirlpool;
-        pdaProgram = _pdaProgram;
         mintErc20 = _mintErc20;
         pdaERC20Account = _pdaERC20Account;
+
+        // Independently derive the PDA address from the seeds, bump, and programId
+        (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
+
+        // Verify that the bump passed to the constructor matches the bump derived from the seeds and programId
+        // This ensures that only the canonical pda address can be used to create the account (first bump that generates a valid pda address)
+        if (bump != _bump) {
+            revert("Invalid bump");
+        }
+
+        if (pda != _pdaProgram) {
+            revert("Invalid PDA");
+        }
+
+        pdaBump = _bump;
+        pdaProgram = _pdaProgram;
     }
 
     function getPositionData(address positionDataAccount, address positionMint) public view returns (Position position) {
@@ -84,10 +110,9 @@ contract nft_token {
     @mutableAccount(pdaTokenAccount)
     @mutableAccount(toErc20)
     @mutableAccount(mintERC20)
-    @mutableAccount(pdaProgram)
     @account(positionDataAccount)
     @signer(fromWallet)
-    function deposit(address positionMint, bytes bump) external {
+    function deposit(address positionMint) external {
         AccountInfo ai = tx.accounts.positionDataAccount;
         // TODO Shift everything left by 8 bytes in production
         Position position = Position({
@@ -143,7 +168,7 @@ contract nft_token {
             pdaProgram,
             uint64(position.liquidity),
             pdaProgramSeed,
-            bump);
+            pdaBump);
     }
 
     @mutableAccount(fromERC20Account)
@@ -151,11 +176,10 @@ contract nft_token {
     @mutableAccount(fromWallet)
     @mutableAccount(pdaTokenAccount)
     @mutableAccount(fromTokenAccount)
-    @mutableAccount(pdaProgram)
     @mutableAccount(mintERC20)
     @signer(sig)
     // Transfer with PDA
-    function withdraw(uint64 amount, bytes bump) external {
+    function withdraw(uint64 amount) external {
         // Transfer ERC20 tokens to the pdaERC20Account address of this program
         SplToken.transfer(
             tx.accounts.fromERC20Account.key,
@@ -170,10 +194,10 @@ contract nft_token {
             pdaProgram,
             1,
             pdaProgramSeed,
-            bump);
+            pdaBump);
 
         // Burn acquired ERC20 tokens
-        SplToken.burn_pda(tx.accounts.pdaERC20Account.key, mintErc20, pdaProgram, amount, pdaProgramSeed, bump);
+        SplToken.burn_pda(tx.accounts.pdaERC20Account.key, mintErc20, pdaProgram, amount, pdaProgramSeed, pdaBump);
     }
 
 //    @mutableAccount(toErc20)
