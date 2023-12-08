@@ -29,7 +29,6 @@ contract nft_token {
     constructor(
         address _orca,
         address _whirlpool,
-        address _pdaProgram,
         address _mintErc20,
         address _pdaERC20Account,
         @bump bytes1 _bump
@@ -40,16 +39,12 @@ contract nft_token {
         pdaERC20Account = _pdaERC20Account;
 
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
+        (address _pdaProgram, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
 
         // Verify that the bump passed to the constructor matches the bump derived from the seeds and programId
         // This ensures that only the canonical pda address can be used to create the account (first bump that generates a valid pda address)
         if (bump != _bump) {
             revert("Invalid bump");
-        }
-
-        if (pda != _pdaProgram) {
-            revert("Invalid PDA");
         }
 
         pdaBump = _bump;

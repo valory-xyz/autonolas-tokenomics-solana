@@ -101,11 +101,10 @@ describe("nft_token", () => {
     console.log("ATA PDA for ERC20:", pdaERC20Account.address.toBase58());
 
     let signature = await program.methods
-      .new(orca, whirlpool, pdaProgram, mintERC20, pdaERC20Account.address, bumpBytes)
+      .new(orca, whirlpool, mintERC20, pdaERC20Account.address, bumpBytes)
       .accounts({ dataAccount: pdaProgram })
       .rpc();
     //console.log("Your transaction signature", signature);
-
     // Wait for program creation confirmation
     await provider.connection.confirmTransaction({
         signature: signature,
