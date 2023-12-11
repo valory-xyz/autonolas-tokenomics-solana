@@ -1,5 +1,6 @@
 import "./library/spl_token.sol";
 import "./library/system_instruction.sol";
+import "./interfaces/whirlpool.sol";
 
 struct Position {
     address whirlpool;      // 32
@@ -9,7 +10,7 @@ struct Position {
     int32 tick_upper_index; // 4
 }
 
-@program_id("DPvSokZKEAYqh6jjmGDUyd4L881uAWg4rFVeA6rec2fr")
+@program_id("2cptovuGx5eyxkbdC6g3C1m3a4W7gJ7KemjBBB2Cthx8")
 contract nft_token {
     address public orca;
     address public whirlpool;

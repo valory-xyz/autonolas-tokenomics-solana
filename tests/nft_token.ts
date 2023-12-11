@@ -3,6 +3,13 @@ import { Program } from "@coral-xyz/anchor";
 import { NftToken } from "../target/types/nft_token";
 import { Positions } from "../target/types/positions";
 import { createMint, mintTo, transfer, getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Whirlpool } from "../target/types/whirlpool";
+import {
+  WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID,
+  PDAUtil, PriceMath, increaseLiquidityQuoteByInputTokenWithParams
+} from "@orca-so/whirlpools-sdk";
+import { DecimalUtil, Percentage } from "@orca-so/common-sdk";
+import Decimal from "decimal.js";
 
 describe("nft_token", () => {
   // Configure the client to use the local cluster.
@@ -16,9 +23,14 @@ describe("nft_token", () => {
   const positionDataAccount = anchor.web3.Keypair.generate();
   const positionProgram = anchor.workspace.Positions as Program<Positions>;
 
+  const realWhirlpool = anchor.workspace.Whirlpool as Program<Whirlpool>;
+
+  const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
   const whirlpool = new anchor.web3.PublicKey("7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm");
   const positionMint = new anchor.web3.PublicKey("J98dgio6XX2rnizUcb8ZQbFhGhqmrYYh3x8Jgza9KYfV");
-  const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
+  const usdc = new anchor.web3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+  const sol = new anchor.web3.PublicKey("So11111111111111111111111111111111111111112");
+  const ataUSDC = new anchor.web3.PublicKey("BP9YEAAKjJ7doxeTyPVnDdR3WcvQCRzJ1pD1JqTu9BNi");
 
   it("Is initialized!", async () => {
     // Add your test here.
@@ -67,7 +79,7 @@ describe("nft_token", () => {
     console.log(accountInfo);
   });
 
-  it.only("NFT wrap and unwrap", async () => {
+  it("NFT wrap and unwrap", async () => {
     console.log("Program ID", program.programId.toBase58());
 
     // Find a PDA account for the program
@@ -328,5 +340,84 @@ describe("nft_token", () => {
 //      .rpc();
 //
 //      console.log('Withdraw tx:', signature);
+  });
+
+  it.only("Adding and removing liquidity", async () => {
+    // Generate a new wallet keypair and airdrop SOL
+    const fromWallet = anchor.web3.Keypair.generate();
+    let fromAirdropSignature = await provider.connection.requestAirdrop(fromWallet.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+    // Wait for airdrop confirmation
+    await provider.connection.confirmTransaction({
+        signature: fromAirdropSignature,
+        ...(await provider.connection.getLatestBlockhash()),
+    });
+    console.log("Wallet from:", fromWallet.publicKey.toBase58());
+      const ctx = WhirlpoolContext.withProvider(provider, orca);
+      const client = buildWhirlpoolClient(ctx);
+
+      const tick_spacing = 64;
+      const whirlpoolClient = await client.getPool(whirlpool);
+
+      // Get the current price of the pool
+      const sqrt_price_x64 = whirlpoolClient.getData().sqrtPrice;
+      const price = PriceMath.sqrtPriceX64ToPrice(sqrt_price_x64, 9, 6);
+      console.log("price:", price.toFixed(6));
+
+      // Set price range, amount of tokens to deposit, and acceptable slippage
+      const lower_price = new Decimal("0.000000005");
+      const upper_price = new Decimal("10000000000000");
+      const usdc_amount = DecimalUtil.toBN(new Decimal("1" /* usdc */), 6);
+      const slippage = Percentage.fromFraction(10, 1000); // 1%
+
+      // Adjust price range (not all prices can be set, only a limited number of prices are available for range specification)
+      // (prices corresponding to InitializableTickIndex are available)
+      const whirlpool_data = whirlpoolClient.getData();
+      const token_a = whirlpoolClient.getTokenAInfo();
+      const token_b = whirlpoolClient.getTokenBInfo();
+      const lower_tick_index = PriceMath.priceToInitializableTickIndex(lower_price, token_a.decimals, token_b.decimals, whirlpool_data.tickSpacing);
+      const upper_tick_index = PriceMath.priceToInitializableTickIndex(upper_price, token_a.decimals, token_b.decimals, whirlpool_data.tickSpacing);
+      console.log("lower & upper tick_index:", lower_tick_index, upper_tick_index);
+      console.log("lower & upper price:",
+        PriceMath.tickIndexToPrice(lower_tick_index, token_a.decimals, token_b.decimals).toFixed(token_b.decimals),
+        PriceMath.tickIndexToPrice(upper_tick_index, token_a.decimals, token_b.decimals).toFixed(token_b.decimals)
+      );
+
+      // Obtain deposit estimation
+      const quote = increaseLiquidityQuoteByInputTokenWithParams({
+        // Pass the pool definition and state
+        tokenMintA: token_a.mint,
+        tokenMintB: token_b.mint,
+        sqrtPrice: whirlpool_data.sqrtPrice,
+        tickCurrentIndex: whirlpool_data.tickCurrentIndex,
+        // Price range
+        tickLowerIndex: lower_tick_index,
+        tickUpperIndex: upper_tick_index,
+        // Input token and amount
+        inputTokenMint: usdc,
+        inputTokenAmount: usdc_amount,
+        // Acceptable slippage
+        slippageTolerance: slippage,
+      });
+
+      // Output the estimation
+      console.log("SOL max input:", DecimalUtil.fromBN(quote.tokenMaxA, token_a.decimals).toFixed(token_a.decimals));
+      console.log("USDC max input:", DecimalUtil.fromBN(quote.tokenMaxB, token_b.decimals).toFixed(token_b.decimals));
+
+      // Create a transaction
+      // Use openPosition method instead of openPositionWithMetadata method
+      const open_position_tx = await whirlpoolClient.openPosition(
+        lower_tick_index,
+        upper_tick_index,
+        quote
+      );
+
+      // Send the transaction
+      const signature = await open_position_tx.tx.buildAndExecute();
+      console.log("signature:", signature);
+      console.log("position NFT:", open_position_tx.positionMint.toBase58());
+
+      // Wait for the transaction to complete
+      const latest_blockhash = await ctx.connection.getLatestBlockhash();
+      await ctx.connection.confirmTransaction({signature, ...latest_blockhash}, "confirmed");
   });
 });
