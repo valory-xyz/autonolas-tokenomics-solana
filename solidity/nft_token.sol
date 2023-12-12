@@ -12,38 +12,37 @@ struct Position {
 
 @program_id("2cptovuGx5eyxkbdC6g3C1m3a4W7gJ7KemjBBB2Cthx8")
 contract nft_token {
-    address public orca;
-    address public whirlpool;
+    address public pool;
     address public pdaProgram;
     address public mintErc20;
     address public pdaERC20Account;
-    // TODO: Change for the latter one in production
-    uint64 public pdaHeader = 0x55bdfe33;//0xd0f7407ae48fbcaa;
-    // PDA seed
+    // PDA header for position account
+    uint64 public pdaHeader = 0xd0f7407ae48fbcaa;
+    // Program PDA seed
     bytes public constant pdaProgramSeed = "pdaProgram";
-    // PDA bump
+    // Program PDA bump
     bytes1 public pdaBump;
     int32 public constant min_tick_lower_index = -443632;
     int32 public constant max_tick_lower_index = 443632;
-    //address constant tokenProgram = address"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
-    uint64 public numTokenAccounts;
+    // Total number of token accounts (even those that hold no positions anymore)
+    uint64 public numPositionAccounts;
+    // First available account index in the set of accounts;
+    uint64 public firstAvailablePositionAccountIndex;
 
-    mapping(address => uint64) public mapTokenAccountLiquidity;
-    address[type(uint32).max] public tokenAccounts;
+    mapping(address => uint64) public mapPositionAccountLiquidity;
+    address[type(uint32).max] public positionAccounts;
 
     @space(10000)
     @payer(payer)
     @seed("pdaProgram")
     constructor(
-        address _orca,
-        address _whirlpool,
+        address _pool,
         address _mintErc20,
         address _pdaERC20Account,
         @bump bytes1 _bump
     ) {
-        orca = _orca;
-        whirlpool = _whirlpool;
+        pool = _pool;
         mintErc20 = _mintErc20;
         pdaERC20Account = _pdaERC20Account;
 
@@ -59,114 +58,69 @@ contract nft_token {
         pdaProgram = pda;
     }
 
-    function getPositionData(address positionDataAccount, address positionMint) public view returns (Position position) {
-        // Check for the
-        for (uint64 i = 0; i < tx.accounts.length; i++) {
-            AccountInfo ai = tx.accounts[i];
-            if (ai.key == positionDataAccount) {
-                // TODO Shift everything left by 8 bytes in production
-                position = Position({
-                    whirlpool: ai.data.readAddress(16),
-                    position_mint: ai.data.readAddress(48),
-                    liquidity: ai.data.readUint128LE(80),
-                    tick_lower_index: ai.data.readInt32LE(96),
-                    tick_upper_index: ai.data.readInt32LE(100)
-                });
-
-                // Check the whirlpool
-                if (position.whirlpool != whirlpool) {
-                    revert("Wrong whirlpool address");
-                }
-
-                // Check the NFT address
-                if (position.position_mint != positionMint) {
-                    revert("Wrong NFT address");
-                }
-
-                // Check the PDA ownership
-                // TODO: Uncomment following lines in production
-//                if (ai.owner != orca) {
-//                    revert("Wrong pda owner");
-//                }
-
-                // Check the PDA header data
-                uint64 header = ai.data.readUint64LE(0);
-                if (header != pdaHeader) {
-                    revert("Wrong pda header");
-                }
-
-                // Check the PDA address correctness
-                (address pdaPosition, ) = try_find_program_address(["position", position.position_mint], orca);
-                // TODO: Uncomment following lines in production
-//                if (pdaPosition != positionDataAccount) {
-//                    revert("Wrong position pdaPosition");
-//                }
-
-                return position;
-            }
-        }
-
-        revert("account missing");
-    }
-
-    @mutableAccount(fromTokenAccount)
-    @mutableAccount(pdaTokenAccount)
-    @mutableAccount(toErc20)
-    @mutableAccount(mintERC20)
-    @account(positionDataAccount)
-    @signer(fromWallet)
-    function deposit(address positionMint) external {
-        AccountInfo ai = tx.accounts.positionDataAccount;
-        // TODO Shift everything left by 8 bytes in production
-        Position position = Position({
-            whirlpool: ai.data.readAddress(16),
-            position_mint: ai.data.readAddress(48),
-            liquidity: ai.data.readUint128LE(80),
-            tick_lower_index: ai.data.readInt32LE(96),
-            tick_upper_index: ai.data.readInt32LE(100)
+    /// @dev Gets the position data.
+    function _getPositionData(AccountInfo position, address positionMint) internal view returns (Position positionData) {
+        positionData = Position({
+            whirlpool: position.data.readAddress(8),
+            position_mint: position.data.readAddress(40),
+            liquidity: position.data.readUint128LE(72),
+            tick_lower_index: position.data.readInt32LE(88),
+            tick_upper_index: position.data.readInt32LE(92)
         });
 
         // Check the whirlpool
-        if (position.whirlpool != whirlpool) {
-            revert("Wrong whirlpool address");
+        if (positionData.whirlpool != pool) {
+            revert("Wrong pool address");
         }
 
         // Check the NFT address
-        if (position.position_mint != positionMint) {
+        if (positionData.position_mint != positionMint) {
             revert("Wrong NFT address");
         }
 
         // Check tick values
-        if (position.tick_lower_index != min_tick_lower_index || position.tick_upper_index != max_tick_lower_index) {
+        if (positionData.tick_lower_index != min_tick_lower_index || positionData.tick_upper_index != max_tick_lower_index) {
             revert("Wrong ticks");
         }
 
         // Check the PDA ownership
-        // TODO: Uncomment following lines in production
-//        if (ai.owner != orca) {
-//            revert("Wrong pda owner");
-//        }
+        if (position.owner != type(whirlpool).program_id) {
+            revert("Wrong pda owner");
+        }
 
         // Check the PDA header data
-        uint64 header = ai.data.readUint64LE(0);
+        uint64 header = position.data.readUint64LE(0);
         if (header != pdaHeader) {
             revert("Wrong pda header");
         }
 
         // Check the PDA address correctness
-        (address pdaPosition, ) = try_find_program_address(["position", position.position_mint], orca);
-        // TODO: Uncomment following lines in production
-//        if (pdaPosition != positionDataAccount) {
-//            revert("Wrong position pda");
-//        }
+        (address pdaPosition, ) = try_find_program_address(["position", positionData.position_mint], type(whirlpool).program_id);
+        if (pdaPosition != position.key) {
+            revert("Wrong position PDA");
+        }
+
+        return positionData;
+    }
+
+    @mutableAccount(fromPositionAccount)
+    @mutableAccount(pdaPositionAccount)
+    @mutableAccount(toErc20)
+    @mutableAccount(mintERC20)
+    @account(position)
+    @account(positionMint)
+    @signer(fromWallet)
+    function deposit() external {
+        // Get the position data based on provided accounts
+        Position positionData = _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
 
         // TODO: Do the liquidity check for max(uint64) value as it is provided as uint128 from the LP provider
-        uint64 liquidity = uint64(position.liquidity);
+        uint64 positionLiquidity = uint64(positionData.liquidity);
 
-        // Transfer the NFT to the pdaTokenAccount address of this program
+        // Transfer the position NFT to the pdaPositionAccount address of this program
         SplToken.transfer(
-            tx.accounts.fromTokenAccount.key,
-            tx.accounts.pdaTokenAccount.key,
+            tx.accounts.fromPositionAccount.key,
+            tx.accounts.pdaPositionAccount.key,
             tx.accounts.fromWallet.key,
             1);
 
@@ -175,29 +129,50 @@ contract nft_token {
             mintErc20,
             tx.accounts.toErc20.key,
             pdaProgram,
-            liquidity,
+            positionLiquidity,
             pdaProgramSeed,
             pdaBump);
 
-        // Record liquidity and its correspondent token account address
-        address tokenAccount = tx.accounts.pdaTokenAccount.key;
-        mapTokenAccountLiquidity[tokenAccount] = liquidity;
-        tokenAccounts[numTokenAccounts] = (tx.accounts.pdaTokenAccount.key);
-        numTokenAccounts++;
+        // Record position liquidity amount and its correspondent account address
+        address positionAddress = tx.accounts.position.key;
+        mapPositionAccountLiquidity[positionAddress] = positionLiquidity;
+        positionAccounts[numPositionAccounts] = positionAddress;
+        numPositionAccounts++;
     }
 
+    @mutableAccount(pool)
+    @mutableAccount(tokenProgramId)
+    @mutableAccount(position)
     @mutableAccount(fromERC20Account)
     @mutableAccount(pdaERC20Account)
     @mutableAccount(fromWallet)
-    @mutableAccount(pdaTokenAccount)
-    @mutableAccount(fromTokenAccount)
+    @mutableAccount(fromPositionAccount)
     @mutableAccount(mintERC20)
+    @mutableAccount(pdaPositionAccount)
+    @mutableAccount(fromTokenAccountA)
+    @mutableAccount(fromTokenAccountB)
+    @mutableAccount(tokenVaultA)
+    @mutableAccount(tokenVaultB)
+    @mutableAccount(tickArrayLower)
+    @mutableAccount(tickArrayUpper)
+    @mutableAccount(positionMint)
     @signer(sig)
     // Transfer with PDA
     function withdraw(uint64 amount) external {
+        address positionAddress = positionAccounts[firstAvailablePositionAccountIndex];
+        if (positionAddress != tx.accounts.position.key) {
+            revert("Wrong liquidity token account");
+        }
+
+        uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
         // Check that the token account exists
-        if (mapTokenAccountLiquidity[tx.accounts.pdaTokenAccount.key] == 0) {
+        if (positionLiquidity == 0) {
             revert("No liquidity on a provided token account");
+        }
+
+        // Check the requested amount to be smaller or equal than the position liquidity
+        if (amount > positionLiquidity) {
+            revert("Amount exceeds the position liquidity");
         }
 
         // Transfer ERC20 tokens to the pdaERC20Account address of this program
@@ -207,41 +182,100 @@ contract nft_token {
             tx.accounts.fromWallet.key,
             amount);
 
-        // Transfer NFT to the user associated token account
-        SplToken.transfer_pda(
-            tx.accounts.pdaTokenAccount.key,
-            tx.accounts.fromTokenAccount.key,
-            pdaProgram,
-            1,
-            pdaProgramSeed,
-            pdaBump);
-
         // Burn acquired ERC20 tokens
         SplToken.burn_pda(tx.accounts.pdaERC20Account.key, mintErc20, pdaProgram, amount, pdaProgramSeed, pdaBump);
 
-        // TODO: If the remainder of the liquidity is formed into another NFT, update the liquidity
-        uint64 remainder = 0;
-        // Update liquidity and its associated token account
-        address tokenAccount = tx.accounts.pdaTokenAccount.key;
-        mapTokenAccountLiquidity[tokenAccount] = remainder;
+        // Decrease the position liquidity
+        AccountMeta[11] metasDecreaseLiquidity = [
+            AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false}),
+            AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
+            AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.fromTokenAccountA.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.fromTokenAccountB.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
+        ];
+        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(amount, 0, 0);
 
-        // TODO: Optimize tokenAccounts array such that zero liquidity accounts are either re-utilized, or cleaned
+        // Update the token remainder
+        uint64 remainder = positionLiquidity - amount;
+        // Update liquidity and its associated position account
+        mapPositionAccountLiquidity[positionAddress] = remainder;
+
+        // If requested amount can be fully covered by the current position liquidity, close the position
+        if (remainder == 0) {
+            // Update fees for the position
+            AccountMeta[4] metasUpdateFees = [
+                AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: false, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: false, is_signer: false})
+            ];
+            whirlpool.updateFeesAndRewards{accounts: metasUpdateFees, seeds: [[pdaProgramSeed, pdaBump]]}();
+
+            // Collect fees from the position
+            AccountMeta[9] metasCollectFees = [
+                AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
+                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.fromTokenAccountA.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.fromTokenAccountB.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false})
+            ];
+            whirlpool.collectFees{accounts: metasCollectFees, seeds: [[pdaProgramSeed, pdaBump]]}();
+
+            // Close the position
+            AccountMeta[6] metasClosePosition = [
+                AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
+                AccountMeta({pubkey: tx.accounts.fromWallet.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.positionMint.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false})
+            ];
+            whirlpool.closePosition{accounts: metasClosePosition, seeds: [[pdaProgramSeed, pdaBump]]}();
+
+            // Increase the first available position account index
+            firstAvailablePositionAccountIndex++;
+        }
     }
 
-//    @mutableAccount(toErc20)
-//    @mutableAccount(mintERC20)
-//    @mutableAccount(pdaProgram)
-//    @signer(owner)
-//    function mint(uint64 amount, bytes bump) external {
-//        // Transfer ERC20 tokens to the user
-//        SplToken.mint_to_pda(
-//            mintErc20,
-//            tx.accounts.toErc20.key,
-//            pdaProgram,
-//            amount,
-//            pdaProgramSeed,
-//            bump);
-//    }
+    @account(position)
+    @account(positionMint)
+    function getPositionData() external view returns (Position) {
+        return _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
+    }
+
+    function getLiquidityAmountsAndPositions(uint64 amount) external view returns (uint64[], address[]) {
+        uint64 totalLiquidity = 0;
+        uint64 numPositions = 0;
+
+        // Get the number of allocated positions
+        for (uint64 i = firstAvailablePositionAccountIndex; i < numPositionAccounts; ++i) {
+            address positionAddress = positionAccounts[i];
+            uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
+            totalLiquidity += positionLiquidity;
+            numPositions++;
+            if (totalLiquidity >= amount) {
+                break;
+            }
+        }
+
+        // Allocate the necessary arrays and fill the values
+        address[] positionAddresses = new address[](numPositions);
+        uint64[] positionAmounts = new uint64[](numPositions);
+        for (uint64 i = 0; i < numPositions; ++i) {
+            positionAddresses[i] = positionAccounts[firstAvailablePositionAccountIndex + i];
+            positionAmounts[i] = mapPositionAccountLiquidity[positionAddresses[i]];
+        }
+    }
 
     @account(account)
     function getBalance() external view returns (uint64) {

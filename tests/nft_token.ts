@@ -20,7 +20,7 @@ describe("nft_token", () => {
 
   const program = anchor.workspace.NftToken as Program<NftToken>;
 
-  const positionDataAccount = anchor.web3.Keypair.generate();
+  const position = anchor.web3.Keypair.generate();
   const positionProgram = anchor.workspace.Positions as Program<Positions>;
 
   const realWhirlpool = anchor.workspace.Whirlpool as Program<Whirlpool>;
@@ -59,23 +59,23 @@ describe("nft_token", () => {
 
     const tx2 = await positionProgram.methods
       .new(whirlpool, positionMint)
-      .accounts({ dataAccount: positionDataAccount.publicKey })
-      .signers([positionDataAccount])
+      .accounts({ dataAccount: position.publicKey })
+      .signers([position])
       .rpc();
     console.log("Your transaction signature", tx2);
 
     const ret = await program.methods
-      .getPositionData(positionDataAccount.publicKey, positionMint)
+      .getPositionData(position.publicKey, positionMint)
       .accounts({ dataAccount: dataAccount.publicKey })
         .remainingAccounts([
-            { pubkey: positionDataAccount.publicKey}
+            { pubkey: position.publicKey}
         ])
         .view();
-    console.log(ret.position);
+    console.log(ret.positionData);
     //console.log(ret.header.toNumber());
-    //console.log(ret.position.liquidity.toNumber());
+    //console.log(ret.positionData.liquidity.toNumber());
 
-    const accountInfo = await provider.connection.getAccountInfo(positionDataAccount.publicKey);
+    const accountInfo = await provider.connection.getAccountInfo(position.publicKey);
     console.log(accountInfo);
   });
 
@@ -123,21 +123,21 @@ describe("nft_token", () => {
         ...(await provider.connection.getLatestBlockhash()),
     });
 
-    // Create new NFT token mint
-    const mint = await createMint(provider.connection, fromWallet, fromWallet.publicKey, null, 0);
-    console.log("NFT token mint:", mint.toBase58());
-    let accountInfo = await provider.connection.getAccountInfo(mint);
+    // Create new NFT position mint
+    const positionMint = await createMint(provider.connection, fromWallet, fromWallet.publicKey, null, 0);
+    console.log("NFT position mint:", positionMint.toBase58());
+    let accountInfo = await provider.connection.getAccountInfo(positionMint);
 //    console.log(accountInfo);
 
     // Get the ATA of the fromWallet address, and if it does not exist, create it
     // This account will have an NFT token
-    const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+    const fromPositionAccount = await getOrCreateAssociatedTokenAccount(
         provider.connection,
         fromWallet,
-        mint,
+        positionMint,
         fromWallet.publicKey
     );
-    console.log("ATA from for NFT:", fromTokenAccount.address.toBase58());
+    console.log("ATA from for NFT:", fromPositionAccount.address.toBase58());
 
     // Get the ATA of the fromWallet address, and if it does not exist, create it
     // This account will have ERC20 tokens
@@ -149,16 +149,16 @@ describe("nft_token", () => {
     );
     console.log("ATA from for ERC20:", fromERC20Account.address.toBase58());
 
-//    accountInfo = await provider.connection.getAccountInfo(fromTokenAccount.address);
+//    accountInfo = await provider.connection.getAccountInfo(fromPositionAccount.address);
 //    console.log(accountInfo);
 //    return;
 
-    // Mint 1 new NFT token to the "fromTokenAccount" account we just created
+    // Mint 1 new NFT token to the "fromPositionAccount" account we just created
     signature = await mintTo(
         provider.connection,
         fromWallet,
-        mint,
-        fromTokenAccount.address,
+        positionMint,
+        fromPositionAccount.address,
         fromWallet.publicKey,
         1,
         []
@@ -172,42 +172,43 @@ describe("nft_token", () => {
 
     // Create pseudo-position corresponding to the NFT
     await positionProgram.methods
-      .new(whirlpool, mint)
-      .accounts({ dataAccount: positionDataAccount.publicKey })
-      .signers([positionDataAccount])
+      .new(whirlpool, positionMint)
+      .accounts({ dataAccount: position.publicKey })
+      .signers([position])
       .rpc();
 
     let balance = await program.methods.getBalance()
-      .accounts({account: fromTokenAccount.address})
+      .accounts({account: fromPositionAccount.address})
       .view();
     console.log("ATA from is minted one NFT, balance:", balance.toNumber());
 
     // ATA for the PDA to store the NFT
-    const pdaTokenAccount = await getOrCreateAssociatedTokenAccount(
+    const pdaPositionAccount = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       fromWallet,
-      mint,
+      positionMint,
       pdaProgram,
       true // allowOwnerOfCurve - allow pda accounts to be have associated token account
     );
-    console.log("ATA PDA", pdaTokenAccount.address.toBase58());
+    console.log("ATA PDA", pdaPositionAccount.address.toBase58());
 
     console.log("\nSending NFT to the program in exchange of ERC20 tokens");
 
     let liquidity = await positionProgram.methods.getLiquidity()
-      .accounts({dataAccount: positionDataAccount.publicKey})
+      .accounts({dataAccount: position.publicKey})
       .view();
     console.log("NFT holding liquidity amount:", liquidity.toNumber());
 
-    await program.methods.deposit(mint)
+    await program.methods.deposit()
       .accounts(
           {
             dataAccount: pdaProgram,
-            fromTokenAccount: fromTokenAccount.address,
-            pdaTokenAccount: pdaTokenAccount.address,
+            fromPositionAccount: fromPositionAccount.address,
+            pdaPositionAccount: pdaPositionAccount.address,
             toErc20: fromERC20Account.address,
             mintERC20: mintERC20,
-            positionDataAccount: positionDataAccount.publicKey,
+            position: position.publicKey,
+            positionMint: positionMint,
             fromWallet: fromWallet.publicKey
           }
       )
@@ -215,12 +216,12 @@ describe("nft_token", () => {
       .rpc();
 
     balance = await program.methods.getBalance()
-      .accounts({account: pdaTokenAccount.address})
+      .accounts({account: pdaPositionAccount.address})
       .view();
     console.log("ATA PDA is transfered the NFT, balance:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromTokenAccount.address})
+      .accounts({account: fromPositionAccount.address})
       .view();
     console.log("ATA from NFT balance now:", balance.toNumber());
 
@@ -243,8 +244,8 @@ describe("nft_token", () => {
             fromERC20Account: fromERC20Account.address,
             pdaERC20Account: pdaERC20Account.address,
             fromWallet: fromWallet.publicKey,
-            pdaTokenAccount: pdaTokenAccount.address,
-            fromTokenAccount: fromTokenAccount.address,
+            pdaPositionAccount: pdaPositionAccount.address,
+            fromPositionAccount: fromPositionAccount.address,
             mintERC20: mintERC20,
             sig: fromWallet.publicKey
           }
@@ -263,12 +264,12 @@ describe("nft_token", () => {
     console.log("ATA from ERC20 balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: pdaTokenAccount.address})
+      .accounts({account: pdaPositionAccount.address})
       .view();
     console.log("ATA PDA NFT balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromTokenAccount.address})
+      .accounts({account: fromPositionAccount.address})
       .view();
     console.log("ATA from NFT balance now:", balance.toNumber());
 
@@ -276,70 +277,6 @@ describe("nft_token", () => {
       .accounts({account: mintERC20})
       .view();
     console.log("Total supply now:", totalSupply.toNumber());
-
-//    await program.methods.mint(new anchor.BN(10), bumpBytes)
-//      .accounts(
-//          {
-//            dataAccount: dataAccount.publicKey,
-//            toErc20: fromERC20Account.address,
-//            mintERC20: mintERC20,
-//            pda: pda,
-//            owner: fromWallet.publicKey
-//          }
-//      )
-//      .signers([fromWallet])
-//      .rpc();
-
-
-//    // Transfer the new token to the "pdaTokenAccount" we just created
-//    signature = await transfer(
-//        provider.connection,
-//        fromWallet,
-//        fromTokenAccount.address,
-//        pdaTokenAccount.address,
-//        fromWallet.publicKey,
-//        1,
-//        []
-//    );
-//    console.log('transfer tx:', signature);
-//    // Wait for transfer confirmation
-//    await provider.connection.confirmTransaction({
-//        signature: signature,
-//        ...(await provider.connection.getLatestBlockhash()),
-//    });
-
-    //accountInfo = await provider.connection.getAccountInfo(pdaTokenAccount.address);
-    //console.log(accountInfo);
-    //console.log(accountInfo.data)
-
-//    const balance = await program.getBalance(pdaTokenAccount.address)
-//        .accounts({dataAccount: dataAccount.publicKey})
-//        .view();
-    //console.log(balance.toNumber());
-
-//    // Create another associated token account for fromWallet
-//    const toTokenAccount = await getOrCreateAssociatedTokenAccount(
-//        provider.connection,
-//        fromWallet,
-//        mint,
-//        fromWallet.publicKey
-//    );
-//
-//    // Transfer NFT back to the user
-//    signature = await program.methods.withdraw(bumpBytesToken)
-//      .accounts(
-//          {
-//            dataAccount: dataAccount.publicKey,
-//            from: pdaTokenAccount.address,
-//            to: toTokenAccount.address,
-//            owner: pdaTokenWallet,
-//            sig: fromWallet.publicKey
-//          }
-//      )
-//      .signers([fromWallet])
-//      .rpc();
-//
-//      console.log('Withdraw tx:', signature);
   });
 
   it.only("Adding and removing liquidity", async () => {
@@ -364,18 +301,18 @@ describe("nft_token", () => {
       console.log("price:", price.toFixed(6));
 
       // Set price range, amount of tokens to deposit, and acceptable slippage
-      const lower_price = new Decimal("0.000000005");
-      const upper_price = new Decimal("10000000000000");
-      const usdc_amount = DecimalUtil.toBN(new Decimal("1" /* usdc */), 6);
+      const usdc_amount = DecimalUtil.toBN(new Decimal("10" /* usdc */), 6);
       const slippage = Percentage.fromFraction(10, 1000); // 1%
+      // Full range price
+      const lower_tick_index = -443632;
+      const upper_tick_index = 443632;
 
       // Adjust price range (not all prices can be set, only a limited number of prices are available for range specification)
       // (prices corresponding to InitializableTickIndex are available)
       const whirlpool_data = whirlpoolClient.getData();
       const token_a = whirlpoolClient.getTokenAInfo();
       const token_b = whirlpoolClient.getTokenBInfo();
-      const lower_tick_index = PriceMath.priceToInitializableTickIndex(lower_price, token_a.decimals, token_b.decimals, whirlpool_data.tickSpacing);
-      const upper_tick_index = PriceMath.priceToInitializableTickIndex(upper_price, token_a.decimals, token_b.decimals, whirlpool_data.tickSpacing);
+
       console.log("lower & upper tick_index:", lower_tick_index, upper_tick_index);
       console.log("lower & upper price:",
         PriceMath.tickIndexToPrice(lower_tick_index, token_a.decimals, token_b.decimals).toFixed(token_b.decimals),
@@ -410,6 +347,8 @@ describe("nft_token", () => {
         upper_tick_index,
         quote
       );
+      //console.log(quote);
+
 
       // Send the transaction
       const signature = await open_position_tx.tx.buildAndExecute();

@@ -6,4 +6,6 @@ solana-test-validator --bpf-program whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc 
 --account 9RfZwn2Prux6QesG1Noo4HzMEBv3rPndJ2bN2Wwd6a7p fork_whirlpool/9RfZwn2Prux6QesG1Noo4HzMEBv3rPndJ2bN2Wwd6a7p.json \
 --account BVNo8ftg2LkkssnWT4ZWdtoFaevnfD6ExYeramwM27pe fork_whirlpool/BVNo8ftg2LkkssnWT4ZWdtoFaevnfD6ExYeramwM27pe.json \
 --account 5aN8t512S6WQEHnwXMZADP57oJWekVw892MnhJ7XYm1P fork_whirlpool/5aN8t512S6WQEHnwXMZADP57oJWekVw892MnhJ7XYm1P.json \
+--account DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi fork_whirlpool/DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi.json \
+--account ZPyVkTuj9TBr1ER4Fnubyz1w7bm5LsXctLiZb8Fs2Do fork_whirlpool/ZPyVkTuj9TBr1ER4Fnubyz1w7bm5LsXctLiZb8Fs2Do.json \
 -r
