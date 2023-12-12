@@ -14,8 +14,8 @@ struct Position {
 contract nft_token {
     address public pool;
     address public pdaProgram;
-    address public mintErc20;
-    address public pdaERC20Account;
+    address public bridgedTokenMint;
+    address public pdaBridgedTokenAccount;
     // PDA header for position account
     uint64 public pdaHeader = 0xd0f7407ae48fbcaa;
     // Program PDA seed
@@ -38,13 +38,13 @@ contract nft_token {
     @seed("pdaProgram")
     constructor(
         address _pool,
-        address _mintErc20,
-        address _pdaERC20Account,
+        address _bridgedTokenMint,
+        address _pdaBridgedTokenAccount,
         @bump bytes1 _bump
     ) {
         pool = _pool;
-        mintErc20 = _mintErc20;
-        pdaERC20Account = _pdaERC20Account;
+        bridgedTokenMint = _bridgedTokenMint;
+        pdaBridgedTokenAccount = _pdaBridgedTokenAccount;
 
         // Independently derive the PDA address from the seeds, bump, and programId
         (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
@@ -106,7 +106,7 @@ contract nft_token {
     @mutableAccount(fromPositionAccount)
     @mutableAccount(pdaPositionAccount)
     @mutableAccount(toErc20)
-    @mutableAccount(mintERC20)
+    @mutableAccount(bridgedTokenMint)
     @account(position)
     @account(positionMint)
     @signer(fromWallet)
@@ -126,7 +126,7 @@ contract nft_token {
 
         // Transfer ERC20 tokens to the user
         SplToken.mint_to_pda(
-            mintErc20,
+            bridgedTokenMint,
             tx.accounts.toErc20.key,
             pdaProgram,
             positionLiquidity,
@@ -144,10 +144,10 @@ contract nft_token {
     @mutableAccount(tokenProgramId)
     @mutableAccount(position)
     @mutableAccount(fromERC20Account)
-    @mutableAccount(pdaERC20Account)
+    @mutableAccount(pdaBridgedTokenAccount)
     @mutableAccount(fromWallet)
     @mutableAccount(fromPositionAccount)
-    @mutableAccount(mintERC20)
+    @mutableAccount(bridgedTokenMint)
     @mutableAccount(pdaPositionAccount)
     @mutableAccount(fromTokenAccountA)
     @mutableAccount(fromTokenAccountB)
@@ -175,15 +175,15 @@ contract nft_token {
             revert("Amount exceeds the position liquidity");
         }
 
-        // Transfer ERC20 tokens to the pdaERC20Account address of this program
+        // Transfer ERC20 tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
             tx.accounts.fromERC20Account.key,
-            tx.accounts.pdaERC20Account.key,
+            tx.accounts.pdaBridgedTokenAccount.key,
             tx.accounts.fromWallet.key,
             amount);
 
         // Burn acquired ERC20 tokens
-        SplToken.burn_pda(tx.accounts.pdaERC20Account.key, mintErc20, pdaProgram, amount, pdaProgramSeed, pdaBump);
+        SplToken.burn_pda(tx.accounts.pdaBridgedTokenAccount.key, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
 
         // Decrease the position liquidity
         AccountMeta[11] metasDecreaseLiquidity = [
