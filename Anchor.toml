@@ -5,7 +5,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-nft_token = "DPvSokZKEAYqh6jjmGDUyd4L881uAWg4rFVeA6rec2fr"
+nft_token = "GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb"
 
 [registry]
 url = "https://api.apr.dev"
