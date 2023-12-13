@@ -103,13 +103,13 @@ contract nft_token {
         return positionData;
     }
 
-    @mutableAccount(fromPositionAccount)
+    @mutableAccount(userPositionAccount)
     @mutableAccount(pdaPositionAccount)
-    @mutableAccount(toErc20)
+    @mutableAccount(userBridgedTokenAccount)
     @mutableAccount(bridgedTokenMint)
     @account(position)
     @account(positionMint)
-    @signer(fromWallet)
+    @signer(userWallet)
     function deposit() external {
         // Get the position data based on provided accounts
         Position positionData = _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
@@ -119,15 +119,15 @@ contract nft_token {
 
         // Transfer the position NFT to the pdaPositionAccount address of this program
         SplToken.transfer(
-            tx.accounts.fromPositionAccount.key,
+            tx.accounts.userPositionAccount.key,
             tx.accounts.pdaPositionAccount.key,
-            tx.accounts.fromWallet.key,
+            tx.accounts.userWallet.key,
             1);
 
         // Transfer ERC20 tokens to the user
         SplToken.mint_to_pda(
             bridgedTokenMint,
-            tx.accounts.toErc20.key,
+            tx.accounts.userBridgedTokenAccount.key,
             pdaProgram,
             positionLiquidity,
             pdaProgramSeed,
@@ -143,14 +143,14 @@ contract nft_token {
     @mutableAccount(pool)
     @mutableAccount(tokenProgramId)
     @mutableAccount(position)
-    @mutableAccount(fromERC20Account)
+    @mutableAccount(userBridgedTokenAccount)
     @mutableAccount(pdaBridgedTokenAccount)
-    @mutableAccount(fromWallet)
-    @mutableAccount(fromPositionAccount)
+    @mutableAccount(userWallet)
+    @mutableAccount(userPositionAccount)
     @mutableAccount(bridgedTokenMint)
     @mutableAccount(pdaPositionAccount)
-    @mutableAccount(fromTokenAccountA)
-    @mutableAccount(fromTokenAccountB)
+    @mutableAccount(userTokenAccountA)
+    @mutableAccount(userTokenAccountB)
     @mutableAccount(tokenVaultA)
     @mutableAccount(tokenVaultB)
     @mutableAccount(tickArrayLower)
@@ -177,9 +177,9 @@ contract nft_token {
 
         // Transfer ERC20 tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
-            tx.accounts.fromERC20Account.key,
+            tx.accounts.userBridgedTokenAccount.key,
             tx.accounts.pdaBridgedTokenAccount.key,
-            tx.accounts.fromWallet.key,
+            tx.accounts.userWallet.key,
             amount);
 
         // Burn acquired ERC20 tokens
@@ -192,8 +192,8 @@ contract nft_token {
             AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
             AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
-            AccountMeta({pubkey: tx.accounts.fromTokenAccountA.key, is_writable: true, is_signer: false}),
-            AccountMeta({pubkey: tx.accounts.fromTokenAccountB.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
@@ -223,9 +223,9 @@ contract nft_token {
                 AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
                 AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.fromTokenAccountA.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.fromTokenAccountB.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false})
             ];
@@ -234,7 +234,7 @@ contract nft_token {
             // Close the position
             AccountMeta[6] metasClosePosition = [
                 AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
-                AccountMeta({pubkey: tx.accounts.fromWallet.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: tx.accounts.userWallet.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.positionMint.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: true, is_signer: false}),

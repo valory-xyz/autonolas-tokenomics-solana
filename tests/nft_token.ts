@@ -6,10 +6,11 @@ import { createMint, mintTo, transfer, getOrCreateAssociatedTokenAccount, unpack
 import { Whirlpool } from "../target/types/whirlpool";
 import {
   WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID,
-  PDAUtil, PriceMath, increaseLiquidityQuoteByInputTokenWithParams
+  PDAUtil, PoolUtil, PriceMath, increaseLiquidityQuoteByInputTokenWithParams
 } from "@orca-so/whirlpools-sdk";
 import { DecimalUtil, Percentage } from "@orca-so/common-sdk";
 import Decimal from "decimal.js";
+import expect from "expect";
 
 describe("nft_token", () => {
   // Configure the client to use the local cluster.
@@ -88,24 +89,24 @@ describe("nft_token", () => {
     console.log("Program PDA:", pdaProgram.toBase58());
 
     // Generate a new wallet keypair and airdrop SOL
-    const fromWallet = anchor.web3.Keypair.generate();
-    let fromAirdropSignature = await provider.connection.requestAirdrop(fromWallet.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+    const userWallet = anchor.web3.Keypair.generate();
+    let airdropSignature = await provider.connection.requestAirdrop(userWallet.publicKey, anchor.web3.LAMPORTS_PER_SOL);
     // Wait for airdrop confirmation
     await provider.connection.confirmTransaction({
-        signature: fromAirdropSignature,
+        signature: airdropSignature,
         ...(await provider.connection.getLatestBlockhash()),
     });
-    console.log("Wallet from:", fromWallet.publicKey.toBase58());
+    console.log("Wallet from:", userWallet.publicKey.toBase58());
 
     // Create new ERC20 token mint with the pda mint authority
-    const bridgedTokenMint = await createMint(provider.connection, fromWallet, pdaProgram, null, 9);
+    const bridgedTokenMint = await createMint(provider.connection, userWallet, pdaProgram, null, 9);
     console.log("ERC20 token mint:", bridgedTokenMint.toBase58());
 
-    // Get the ATA of the fromWallet address, and if it does not exist, create it
+    // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account will have ERC20 tokens
     const pdaBridgedTokenAccount = await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        fromWallet,
+        userWallet,
         bridgedTokenMint,
         pdaProgram,
         true // allowOwnerOfCurve - allow pda accounts to be have associated token account
@@ -124,42 +125,42 @@ describe("nft_token", () => {
     });
 
     // Create new NFT position mint
-    const positionMint = await createMint(provider.connection, fromWallet, fromWallet.publicKey, null, 0);
+    const positionMint = await createMint(provider.connection, userWallet, userWallet.publicKey, null, 0);
     console.log("NFT position mint:", positionMint.toBase58());
     let accountInfo = await provider.connection.getAccountInfo(positionMint);
 //    console.log(accountInfo);
 
-    // Get the ATA of the fromWallet address, and if it does not exist, create it
+    // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account will have an NFT token
-    const fromPositionAccount = await getOrCreateAssociatedTokenAccount(
+    const userPositionAccount = await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        fromWallet,
+        userWallet,
         positionMint,
-        fromWallet.publicKey
+        userWallet.publicKey
     );
-    console.log("ATA from for NFT:", fromPositionAccount.address.toBase58());
+    console.log("ATA from for NFT:", userPositionAccount.address.toBase58());
 
-    // Get the ATA of the fromWallet address, and if it does not exist, create it
+    // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account will have ERC20 tokens
-    const fromERC20Account = await getOrCreateAssociatedTokenAccount(
+    const userBridgedTokenAccount = await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        fromWallet,
+        userWallet,
         bridgedTokenMint,
-        fromWallet.publicKey
+        userWallet.publicKey
     );
-    console.log("ATA from for ERC20:", fromERC20Account.address.toBase58());
+    console.log("ATA from for ERC20:", userBridgedTokenAccount.address.toBase58());
 
-//    accountInfo = await provider.connection.getAccountInfo(fromPositionAccount.address);
+//    accountInfo = await provider.connection.getAccountInfo(userPositionAccount.address);
 //    console.log(accountInfo);
 //    return;
 
-    // Mint 1 new NFT token to the "fromPositionAccount" account we just created
+    // Mint 1 new NFT token to the "userPositionAccount" account we just created
     signature = await mintTo(
         provider.connection,
-        fromWallet,
+        userWallet,
         positionMint,
-        fromPositionAccount.address,
-        fromWallet.publicKey,
+        userPositionAccount.address,
+        userWallet.publicKey,
         1,
         []
     );
@@ -178,14 +179,14 @@ describe("nft_token", () => {
       .rpc();
 
     let balance = await program.methods.getBalance()
-      .accounts({account: fromPositionAccount.address})
+      .accounts({account: userPositionAccount.address})
       .view();
     console.log("ATA from is minted one NFT, balance:", balance.toNumber());
 
     // ATA for the PDA to store the NFT
     const pdaPositionAccount = await getOrCreateAssociatedTokenAccount(
       provider.connection,
-      fromWallet,
+      userWallet,
       positionMint,
       pdaProgram,
       true // allowOwnerOfCurve - allow pda accounts to be have associated token account
@@ -203,16 +204,16 @@ describe("nft_token", () => {
       .accounts(
           {
             dataAccount: pdaProgram,
-            fromPositionAccount: fromPositionAccount.address,
+            userPositionAccount: userPositionAccount.address,
             pdaPositionAccount: pdaPositionAccount.address,
-            toErc20: fromERC20Account.address,
+            userBridgedTokenAccount: userBridgedTokenAccount.address,
             bridgedTokenMint: bridgedTokenMint,
             position: position.publicKey,
             positionMint: positionMint,
-            fromWallet: fromWallet.publicKey
+            userWallet: userWallet.publicKey
           }
       )
-      .signers([fromWallet])
+      .signers([userWallet])
       .rpc();
 
     balance = await program.methods.getBalance()
@@ -221,14 +222,14 @@ describe("nft_token", () => {
     console.log("ATA PDA is transfered the NFT, balance:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromPositionAccount.address})
+      .accounts({account: userPositionAccount.address})
       .view();
-    console.log("ATA from NFT balance now:", balance.toNumber());
+    console.log("ATA user NFT balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromERC20Account.address})
+      .accounts({account: userBridgedTokenAccount.address})
       .view();
-    console.log("ATA from ERC20 balance now:", balance.toNumber());
+    console.log("ATA user bridged ERC20 balance now:", balance.toNumber());
 
     let totalSupply = await program.methods.totalSupply()
       .accounts({account: bridgedTokenMint})
@@ -241,16 +242,16 @@ describe("nft_token", () => {
       .accounts(
           {
             dataAccount: pdaProgram,
-            fromERC20Account: fromERC20Account.address,
+            userBridgedTokenAccount: userBridgedTokenAccount.address,
             pdaBridgedTokenAccount: pdaBridgedTokenAccount.address,
-            fromWallet: fromWallet.publicKey,
+            userWallet: userWallet.publicKey,
             pdaPositionAccount: pdaPositionAccount.address,
-            fromPositionAccount: fromPositionAccount.address,
+            userPositionAccount: userPositionAccount.address,
             bridgedTokenMint: bridgedTokenMint,
-            sig: fromWallet.publicKey
+            sig: userWallet.publicKey
           }
       )
-      .signers([fromWallet])
+      .signers([userWallet])
       .rpc();
 
     balance = await program.methods.getBalance()
@@ -259,9 +260,9 @@ describe("nft_token", () => {
     console.log("ATA PDA ERC20 balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromERC20Account.address})
+      .accounts({account: userBridgedTokenAccount.address})
       .view();
-    console.log("ATA from ERC20 balance now:", balance.toNumber());
+    console.log("ATA user bridged ERC20 balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
       .accounts({account: pdaPositionAccount.address})
@@ -269,9 +270,9 @@ describe("nft_token", () => {
     console.log("ATA PDA NFT balance now:", balance.toNumber());
 
     balance = await program.methods.getBalance()
-      .accounts({account: fromPositionAccount.address})
+      .accounts({account: userPositionAccount.address})
       .view();
-    console.log("ATA from NFT balance now:", balance.toNumber());
+    console.log("ATA user NFT balance now:", balance.toNumber());
 
     totalSupply = await program.methods.totalSupply()
       .accounts({account: bridgedTokenMint})
@@ -357,18 +358,18 @@ describe("nft_token", () => {
     console.log("Program PDA:", pdaProgram.toBase58());
 
     // Generate a new wallet keypair and airdrop SOL
-    const fromWallet = provider.wallet.payer;
-    console.log("Wallet from:", fromWallet.publicKey.toBase58());
+    const userWallet = provider.wallet.payer;
+    console.log("Wallet from:", userWallet.publicKey.toBase58());
 
     // Create new bridged ERC20 token mint with the pda mint authority
-    const bridgedTokenMint = await createMint(provider.connection, fromWallet, pdaProgram, null, 9);
+    const bridgedTokenMint = await createMint(provider.connection, userWallet, pdaProgram, null, 9);
     console.log("Bridged token mint:", bridgedTokenMint.toBase58());
 
-    // Get the ATA of the fromWallet address, and if it does not exist, create it
+    // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account will have bridged ERC20 tokens
     const pdaBridgedTokenAccount = await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        fromWallet,
+        userWallet,
         bridgedTokenMint,
         pdaProgram,
         true // allowOwnerOfCurve - allow pda accounts to be have associated token account
@@ -389,112 +390,120 @@ describe("nft_token", () => {
     // Get all token accounts
     const token_accounts = (await ctx.connection.getTokenAccountsByOwner(ctx.wallet.publicKey, {programId: TOKEN_PROGRAM_ID})).value;
 
-    // Get candidate addresses for the position
     let parsed;
-    const whirlpool_position_candidate_pubkeys = token_accounts.map((ta) => {
-        const parsed = unpackAccount(ta.pubkey, ta.account);
-        console.log("parsed", parsed);
+    let position;
+    for (let i = 0; i < token_accounts.length; i++) {
+        const ta = token_accounts[i];
+        parsed = unpackAccount(ta.pubkey, ta.account);
+        if (parsed.amount.toString() === "1") {
+            position = PDAUtil.getPosition(ctx.program.programId, parsed.mint);
+            break;
+        }
+    }
 
-        // Derive the address of Whirlpool's position from the mint address (whether or not it exists)
-        const pda = PDAUtil.getPosition(ctx.program.programId, parsed.mint);
-        //console.log("Calculated PDA", pda);
-        //console.log("programId", ctx.program.programId);
 
-        // Returns the address of the Whirlpool position only if the number of tokens is 1 (ignores empty token accounts and non-NFTs)
-        return new anchor.BN(parsed.amount.toString()).eq(new anchor.BN(1)) ? pda.publicKey : undefined;
-    }).filter(pubkey => pubkey !== undefined);
+    // NFT position mint
+    let accountInfo = await provider.connection.getAccountInfo(positionMint);
+    //console.log(accountInfo);
 
-    console.log(whirlpool_position_candidate_pubkeys);
-//    // Create new NFT position mint
-//    const positionMint = await createMint(provider.connection, fromWallet, fromWallet.publicKey, null, 0);
-//    console.log("NFT position mint:", positionMint.toBase58());
-//    let accountInfo = await provider.connection.getAccountInfo(positionMint);
-////    console.log(accountInfo);
-//
-//    // Get the ATA of the fromWallet address, and if it does not exist, create it
-//    // This account will have an NFT token
-//    const fromPositionAccount = await getOrCreateAssociatedTokenAccount(
-//        provider.connection,
-//        fromWallet,
-//        positionMint,
-//        fromWallet.publicKey
-//    );
-//    console.log("ATA from for NFT:", fromPositionAccount.address.toBase58());
-//
-//    // Get the ATA of the fromWallet address, and if it does not exist, create it
-//    // This account will have ERC20 tokens
-//    const fromERC20Account = await getOrCreateAssociatedTokenAccount(
-//        provider.connection,
-//        fromWallet,
-//        bridgedTokenMint,
-//        fromWallet.publicKey
-//    );
-//    console.log("ATA from for ERC20:", fromERC20Account.address.toBase58());
-//
-////    accountInfo = await provider.connection.getAccountInfo(fromPositionAccount.address);
-////    console.log(accountInfo);
-////    return;
-//
-//    // Mint 1 new NFT token to the "fromPositionAccount" account we just created
-//    signature = await mintTo(
-//        provider.connection,
-//        fromWallet,
-//        positionMint,
-//        fromPositionAccount.address,
-//        fromWallet.publicKey,
-//        1,
-//        []
-//    );
-//    //console.log('mint tx:', signature);
-//    // Wait for mint confirmation
-//    await provider.connection.confirmTransaction({
-//        signature: signature,
-//        ...(await provider.connection.getLatestBlockhash()),
-//    });
-//
-//    // Create pseudo-position corresponding to the NFT
-//    await positionProgram.methods
-//      .new(whirlpool, positionMint)
-//      .accounts({ dataAccount: position.publicKey })
-//      .signers([position])
-//      .rpc();
-//
-//    let balance = await program.methods.getBalance()
-//      .accounts({account: fromPositionAccount.address})
-//      .view();
-//    console.log("ATA from is minted one NFT, balance:", balance.toNumber());
-//
-//    // ATA for the PDA to store the NFT
-//    const pdaPositionAccount = await getOrCreateAssociatedTokenAccount(
-//      provider.connection,
-//      fromWallet,
-//      positionMint,
-//      pdaProgram,
-//      true // allowOwnerOfCurve - allow pda accounts to be have associated token account
-//    );
-//    console.log("ATA PDA", pdaPositionAccount.address.toBase58());
-//
-//    console.log("\nSending NFT to the program in exchange of ERC20 tokens");
-//
-//    let liquidity = await positionProgram.methods.getLiquidity()
-//      .accounts({dataAccount: position.publicKey})
-//      .view();
-//    console.log("NFT holding liquidity amount:", liquidity.toNumber());
-//
-//    await program.methods.deposit()
-//      .accounts(
-//          {
-//            dataAccount: pdaProgram,
-//            fromPositionAccount: fromPositionAccount.address,
-//            pdaPositionAccount: pdaPositionAccount.address,
-//            toErc20: fromERC20Account.address,
-//            bridgedTokenMint: bridgedTokenMint,
-//            position: position.publicKey,
-//            positionMint: positionMint,
-//            fromWallet: fromWallet.publicKey
-//          }
-//      )
-//      .signers([fromWallet])
-//      .rpc();
+    // Get the ATA of the userWallet address, and if it does not exist, create it
+    // This account has an NFT token
+    const userPositionAccount = parsed.address;
+    console.log("ATA from for NFT:", userPositionAccount.toBase58());
+
+    // Get the ATA of the userWallet address, and if it does not exist, create it
+    // This account will have ERC20 tokens
+    const userBridgedTokenAccount = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        userWallet,
+        bridgedTokenMint,
+        userWallet.publicKey
+    );
+    console.log("ATA from for ERC20:", userBridgedTokenAccount.address.toBase58());
+
+//    accountInfo = await provider.connection.getAccountInfo(userPositionAccount);
+//    console.log(accountInfo);
+
+    let balance = await program.methods.getBalance()
+      .accounts({account: userPositionAccount})
+      .view();
+    console.log("ATA from must have one NFT, balance:", balance.toNumber());
+
+    // ATA for the PDA to store the position NFT
+    const pdaPositionAccount = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      userWallet,
+      positionMint,
+      pdaProgram,
+      true // allowOwnerOfCurve - allow pda accounts to be have associated token account
+    );
+    console.log("ATA PDA", pdaPositionAccount.address.toBase58());
+
+    console.log("\nSending position NFT to the program in exchange of bridged ERC20 tokens");
+
+    // Get the status of the position
+    const positionSDK = await client.getPosition(position.publicKey);
+    const data = positionSDK.getData();
+
+    // Get the price range of the position
+    const lower_price = PriceMath.tickIndexToPrice(data.tickLowerIndex, token_a.decimals, token_b.decimals);
+    const upper_price = PriceMath.tickIndexToPrice(data.tickUpperIndex, token_a.decimals, token_b.decimals);
+
+    // Calculate the amount of tokens that can be withdrawn from the position
+    const amounts = PoolUtil.getTokenAmountsFromLiquidity(
+      data.liquidity,
+      whirlpoolClient.getData().sqrtPrice,
+      PriceMath.tickIndexToSqrtPriceX64(data.tickLowerIndex),
+      PriceMath.tickIndexToSqrtPriceX64(data.tickUpperIndex),
+      true
+    );
+
+    // Output the status of the position
+    console.log("position:", position.publicKey.toBase58());
+    console.log("\twhirlpool address:", data.whirlpool.toBase58());
+    console.log("\ttokenA:", token_a.mint.toBase58());
+    console.log("\ttokenB:", token_b.mint.toBase58());
+    console.log("\tliquidity:", data.liquidity.toNumber());
+    console.log("\tlower:", data.tickLowerIndex, lower_price.toFixed(token_b.decimals));
+    console.log("\tupper:", data.tickUpperIndex, upper_price.toFixed(token_b.decimals));
+    console.log("\tamountA:", DecimalUtil.fromBN(amounts.tokenA, token_a.decimals).toString());
+    console.log("\tamountB:", DecimalUtil.fromBN(amounts.tokenB, token_b.decimals).toString());
+
+    await program.methods.deposit()
+      .accounts(
+          {
+            dataAccount: pdaProgram,
+            userPositionAccount: userPositionAccount,
+            pdaPositionAccount: pdaPositionAccount.address,
+            userBridgedTokenAccount: userBridgedTokenAccount.address,
+            bridgedTokenMint: bridgedTokenMint,
+            position: position.publicKey,
+            positionMint: positionMint,
+            userWallet: userWallet.publicKey
+          }
+      )
+      .signers([userWallet])
+      .rpc();
+      
+    balance = await program.methods.getBalance()
+      .accounts({account: pdaPositionAccount.address})
+      .view();
+    console.log("ATA PDA is transfered the NFT, balance:", balance.toNumber());
+
+    balance = await program.methods.getBalance()
+      .accounts({account: userPositionAccount})
+      .view();
+    console.log("ATA user NFT balance now:", balance.toNumber());
+
+    balance = await program.methods.getBalance()
+      .accounts({account: userBridgedTokenAccount.address})
+      .view();
+    console.log("ATA user bridged ERC20 balance now:", balance.toNumber());
+    expect(data.liquidity.toNumber()).toEqual(balance.toNumber());
+
+    let totalSupply = await program.methods.totalSupply()
+      .accounts({account: bridgedTokenMint})
+      .view();
+    console.log("Total supply now:", totalSupply.toNumber());
   });
 });
