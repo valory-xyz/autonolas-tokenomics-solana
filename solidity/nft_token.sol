@@ -213,6 +213,10 @@ contract nft_token {
             AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
         ];
+        // a026d06f685b2c01 - decreaseLiquidity, eff0ae00000000000000000000000000 - amount, aaf1950200000000 - minA, b8522d0000000000 - minB
+//        bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
+//        address whirlpool2 = address"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+//        whirlpool2.call{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(bincode);
         whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(amount, 0, 0);
 
         // Update the token remainder

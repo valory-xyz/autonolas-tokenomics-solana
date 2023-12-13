@@ -6,7 +6,8 @@ import { createMint, mintTo, transfer, getOrCreateAssociatedTokenAccount, unpack
 import { Whirlpool } from "../target/types/whirlpool";
 import {
   WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID,
-  PDAUtil, PoolUtil, PriceMath, increaseLiquidityQuoteByInputTokenWithParams
+  PDAUtil, PoolUtil, PriceMath, increaseLiquidityQuoteByInputTokenWithParams,
+  decreaseLiquidityQuoteByLiquidityWithParams
 } from "@orca-so/whirlpools-sdk";
 import { DecimalUtil, Percentage } from "@orca-so/common-sdk";
 import Decimal from "decimal.js";
@@ -100,7 +101,7 @@ describe("nft_token", () => {
         signature: airdropSignature,
         ...(await provider.connection.getLatestBlockhash()),
     });
-    console.log("Wallet from:", userWallet.publicKey.toBase58());
+    console.log("User wallet:", userWallet.publicKey.toBase58());
 
     // Create new bridged token mint with the pda mint authority
     const bridgedTokenMint = await createMint(provider.connection, userWallet, pdaProgram, null, 9);
@@ -316,7 +317,7 @@ describe("nft_token", () => {
       );
 
       // Obtain deposit estimation
-      const quote = increaseLiquidityQuoteByInputTokenWithParams({
+      let quote = increaseLiquidityQuoteByInputTokenWithParams({
         // Pass the pool definition and state
         tokenMintA: token_a.mint,
         tokenMintB: token_b.mint,
@@ -353,7 +354,7 @@ describe("nft_token", () => {
       const positionMint = open_position_tx.positionMint;
 
       // Wait for the transaction to complete
-      const latest_blockhash = await ctx.connection.getLatestBlockhash();
+      let latest_blockhash = await ctx.connection.getLatestBlockhash();
       await ctx.connection.confirmTransaction({signature, ...latest_blockhash}, "confirmed");
 
     // Find a PDA account for the program
@@ -471,6 +472,40 @@ describe("nft_token", () => {
     console.log("\tamountA:", DecimalUtil.fromBN(amounts.tokenA, token_a.decimals).toString());
     console.log("\tamountB:", DecimalUtil.fromBN(amounts.tokenB, token_b.decimals).toString());
 
+//  // Set the percentage of liquidity to be withdrawn (30%)
+//  const delta_liquidity = data.liquidity.mul(new anchor.BN(30)).div(new anchor.BN(100));
+//  console.log(delta_liquidity.toNumber());
+//
+//  quote = decreaseLiquidityQuoteByLiquidityWithParams({
+//    // Pass the pool state as is
+//    sqrtPrice: whirlpool_data.sqrtPrice,
+//    tickCurrentIndex: whirlpool_data.tickCurrentIndex,
+//    // Pass the price range of the position as is
+//    tickLowerIndex: data.tickLowerIndex,
+//    tickUpperIndex: data.tickUpperIndex,
+//    // Liquidity to be withdrawn
+//    liquidity: delta_liquidity,
+//    // Acceptable slippage
+//    slippageTolerance: slippage,
+//  });
+//  console.log(quote);
+//
+//  // Create a transaction
+//  const decrease_liquidity_tx = await positionSDK.decreaseLiquidity(quote);
+//  console.log(decrease_liquidity_tx.instructions[2].instructions);
+//  console.log(decrease_liquidity_tx.instructions[2].instructions[0].keys);
+//
+//  // Send the transaction
+//  signature = await decrease_liquidity_tx.buildAndExecute();
+//  console.log("signature:", signature);
+//
+//  // Wait for the transaction to complete
+//  latest_blockhash = await ctx.connection.getLatestBlockhash();
+//  await ctx.connection.confirmTransaction({signature, ...latest_blockhash}, "confirmed");
+//
+//  // Output the liquidity after transaction execution
+//  console.log("liquidity(after):", (await positionSDK.refreshData()).liquidity.toString());
+//  return;
 
     // ############################## DEPOSIT ##############################
     
@@ -534,7 +569,7 @@ describe("nft_token", () => {
         userWallet.publicKey
     );
     console.log("User ATA for tokenB:", userTokenAccountB.address.toBase58());
-    
+
     console.log("\nSending bridged tokens back to the program in exchange of the NFT");
     // Transfer bridged tokens from the user to the program, decrease the position and send tokens back to the user
     const tBalalnce = new anchor.BN("20000000");
@@ -573,7 +608,7 @@ describe("nft_token", () => {
             console.error("Transaction Error:", error);
         }
     }
-//
+
 //    balance = await program.methods.getBalance()
 //      .accounts({account: pdaBridgedTokenAccount.address})
 //      .view();
