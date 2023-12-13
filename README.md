@@ -2,8 +2,9 @@
 Autonolas tokenomics contracts on Solana
 
 ## Pre-requisites
-Solana version: `solana-cli 1.17.7 (src:fca44b78; feat:3073089885, client:SolanaLabs)`;
-Anchor version: `anchor-cli 0.29.0`.
+- Solang version: `v0.3.3`;
+- Solana version: `solana-cli 1.17.7 (src:fca44b78; feat:3073089885, client:SolanaLabs)`;
+- Anchor version: `anchor-cli 0.29.0`.
 
 ## Development
 Install the dependencies
