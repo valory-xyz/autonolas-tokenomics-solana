@@ -16,6 +16,7 @@ describe("nft_token", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
+  console.log("Provider wallet:", provider.wallet.payer.publicKey.toBase58());
   const program = anchor.workspace.NftToken as Program<NftToken>;
 
   const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
@@ -29,6 +30,10 @@ describe("nft_token", () => {
   const tickArrayUpper = new anchor.web3.PublicKey("ZPyVkTuj9TBr1ER4Fnubyz1w7bm5LsXctLiZb8Fs2Do");
 
   it("Adding and removing liquidity", async () => {
+    // User wallet is the provider payer
+    const userWallet = provider.wallet.payer;
+    console.log("User wallet:", userWallet.publicKey.toBase58());
+
       const ctx = WhirlpoolContext.withProvider(provider, orca);
       const client = buildWhirlpoolClient(ctx);
 
@@ -104,10 +109,6 @@ describe("nft_token", () => {
     const [pdaProgram, bump] = await anchor.web3.PublicKey.findProgramAddress([Buffer.from("pdaProgram", "utf-8")], program.programId);
     const bumpBytes = Buffer.from(new Uint8Array([bump]));
     console.log("Program PDA:", pdaProgram.toBase58());
-
-    // Generate a new wallet keypair and airdrop SOL
-    const userWallet = provider.wallet.payer;
-    console.log("Wallet from:", userWallet.publicKey.toBase58());
 
     // Create new bridged token mint with the pda mint authority
     const bridgedTokenMint = await createMint(provider.connection, userWallet, pdaProgram, null, 9);
