@@ -12,6 +12,7 @@ struct Position {
 
 @program_id("2cptovuGx5eyxkbdC6g3C1m3a4W7gJ7KemjBBB2Cthx8")
 contract nft_token {
+    address public constant orca = address"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
     address public pool;
     address public pdaProgram;
     address public bridgedTokenMint;
@@ -85,7 +86,7 @@ contract nft_token {
         }
 
         // Check the PDA ownership
-        if (position.owner != type(whirlpool).program_id) {
+        if (position.owner != orca) {
             revert("Wrong pda owner");
         }
 
@@ -96,7 +97,7 @@ contract nft_token {
         }
 
         // Check the PDA address correctness
-        (address pdaPosition, ) = try_find_program_address(["position", positionData.position_mint], type(whirlpool).program_id);
+        (address pdaPosition, ) = try_find_program_address(["position", positionData.position_mint], orca);
         if (pdaPosition != position.key) {
             revert("Wrong position PDA");
         }
@@ -125,7 +126,7 @@ contract nft_token {
             tx.accounts.userWallet.key,
             1);
 
-        // Transfer ERC20 tokens to the user
+        // Transfer bridged tokens to the user
         SplToken.mint_to_pda(
             bridgedTokenMint,
             tx.accounts.userBridgedTokenAccount.key,
@@ -183,22 +184,27 @@ contract nft_token {
             revert("Amount exceeds the position liquidity");
         }
 
-        // Transfer ERC20 tokens to the pdaBridgedTokenAccount address of this program
+        // Check the pdaBridgedTokenAccount address
+        if (tx.accounts.pdaBridgedTokenAccount.key != pdaBridgedTokenAccount) {
+            revert("Wrong PDA bridged token ATA");
+        }
+
+        // Transfer bridged tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
             tx.accounts.userBridgedTokenAccount.key,
-            tx.accounts.pdaBridgedTokenAccount.key,
+            pdaBridgedTokenAccount,
             tx.accounts.userWallet.key,
             amount);
 
-        // Burn acquired ERC20 tokens
-        SplToken.burn_pda(tx.accounts.pdaBridgedTokenAccount.key, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
+        // Burn acquired bridged tokens
+        SplToken.burn_pda(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
 
         // Decrease the position liquidity
         AccountMeta[11] metasDecreaseLiquidity = [
             AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false}),
             AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
-            AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+            AccountMeta({pubkey: positionAddress, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: pdaPositionAta, is_writable: false, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
@@ -219,7 +225,7 @@ contract nft_token {
             // Update fees for the position
             AccountMeta[4] metasUpdateFees = [
                 AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: positionAddress, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: false, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: false, is_signer: false})
             ];
@@ -229,7 +235,7 @@ contract nft_token {
             AccountMeta[9] metasCollectFees = [
                 AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
-                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: positionAddress, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: pdaPositionAta, is_writable: false, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
@@ -243,7 +249,7 @@ contract nft_token {
             AccountMeta[6] metasClosePosition = [
                 AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
                 AccountMeta({pubkey: tx.accounts.userWallet.key, is_writable: true, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: positionAddress, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.positionMint.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: pdaPositionAta, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false})
