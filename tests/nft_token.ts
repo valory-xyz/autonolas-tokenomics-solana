@@ -23,7 +23,6 @@ describe("nft_token", () => {
   const whirlpool = new anchor.web3.PublicKey("7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm");
   const usdc = new anchor.web3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   const sol = new anchor.web3.PublicKey("So11111111111111111111111111111111111111112");
-  const ataUSDC = new anchor.web3.PublicKey("BP9YEAAKjJ7doxeTyPVnDdR3WcvQCRzJ1pD1JqTu9BNi");
   const tokenVaultA = new anchor.web3.PublicKey("9RfZwn2Prux6QesG1Noo4HzMEBv3rPndJ2bN2Wwd6a7p");
   const tokenVaultB = new anchor.web3.PublicKey("BVNo8ftg2LkkssnWT4ZWdtoFaevnfD6ExYeramwM27pe");
   const tickArrayLower = new anchor.web3.PublicKey("DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi");
@@ -125,10 +124,19 @@ describe("nft_token", () => {
     );
     console.log("PDA ATA for bridged token:", pdaBridgedTokenAccount.address.toBase58());
 
-    signature = await program.methods
-      .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes)
-      .accounts({ dataAccount: pdaProgram })
-      .rpc();
+    try {
+        signature = await program.methods
+          .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes)
+          .accounts({ dataAccount: pdaProgram })
+          .rpc();
+    } catch (error) {
+        if (error instanceof Error && "message" in error) {
+            console.error("Program Error:", error);
+            console.error("Error Message:", error.message);
+        } else {
+            console.error("Transaction Error:", error);
+        }
+    }
     //console.log("Your transaction signature", signature);
     // Wait for program creation confirmation
     await provider.connection.confirmTransaction({

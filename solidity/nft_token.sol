@@ -189,6 +189,11 @@ contract nft_token {
             revert("Wrong PDA bridged token ATA");
         }
 
+        // Check that the pool is correct
+        if (tx.accounts.pool.key != pool) {
+            revert("Pool address is incorrect");
+        }
+
         // Transfer bridged tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
             tx.accounts.userBridgedTokenAccount.key,
