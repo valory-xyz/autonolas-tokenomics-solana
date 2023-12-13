@@ -31,6 +31,7 @@ contract nft_token {
     uint64 public firstAvailablePositionAccountIndex;
 
     mapping(address => uint64) public mapPositionAccountLiquidity;
+    mapping(address => address) public mapPositionAccountPdaAta;
     address[type(uint32).max] public positionAccounts;
 
     @space(10000)
@@ -136,6 +137,8 @@ contract nft_token {
         // Record position liquidity amount and its correspondent account address
         address positionAddress = tx.accounts.position.key;
         mapPositionAccountLiquidity[positionAddress] = positionLiquidity;
+        address pdaPositionAta = tx.accounts.pdaPositionAccount.key;
+        mapPositionAccountPdaAta[positionAddress] = pdaPositionAta;
         positionAccounts[numPositionAccounts] = positionAddress;
         numPositionAccounts++;
     }
@@ -162,6 +165,11 @@ contract nft_token {
         address positionAddress = positionAccounts[firstAvailablePositionAccountIndex];
         if (positionAddress != tx.accounts.position.key) {
             revert("Wrong liquidity token account");
+        }
+
+        address pdaPositionAta = tx.accounts.pdaPositionAccount.key;
+        if (mapPositionAccountPdaAta[positionAddress] != pdaPositionAta) {
+            revert("Wrong position ATA");
         }
 
         uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
@@ -191,7 +199,7 @@ contract nft_token {
             AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false}),
             AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
             AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
-            AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
+            AccountMeta({pubkey: pdaPositionAta, is_writable: false, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
             AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
@@ -222,7 +230,7 @@ contract nft_token {
                 AccountMeta({pubkey: pool, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: pdaProgram, is_writable: false, is_signer: true}),
                 AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
+                AccountMeta({pubkey: pdaPositionAta, is_writable: false, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
@@ -237,7 +245,7 @@ contract nft_token {
                 AccountMeta({pubkey: tx.accounts.userWallet.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: tx.accounts.positionMint.key, is_writable: true, is_signer: false}),
-                AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: true, is_signer: false}),
+                AccountMeta({pubkey: pdaPositionAta, is_writable: true, is_signer: false}),
                 AccountMeta({pubkey: SplToken.tokenProgramId, is_writable: false, is_signer: false})
             ];
             whirlpool.closePosition{accounts: metasClosePosition, seeds: [[pdaProgramSeed, pdaBump]]}();
