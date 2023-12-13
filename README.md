@@ -21,12 +21,12 @@ Run the validator in a separate window:
 ./validator.sh
 ```
 
-Update the `@programId` in nft_token.sol, and re-run
+Then, execute the testing script:
 ```
-anchor build
+solana airdrop 10000 9fit3w7t6FHATDaZWotpWqN7NpqgL3Lm1hqUop4hAy8h --url localhost && anchor test --skip-local-validator
 ```
 
-Then, execute the testing script (make sure to pass the PROVIDER_WALLET_ADDRESS):
+If the `@programId` in nft_token.sol does not match with the deployed one, update it and re-run
 ```
-solana airdrop 10000 PROVIDER_WALLET_ADDRESS --url localhost && anchor test --skip-local-validator
+anchor build
 ```
