@@ -21,8 +21,8 @@ describe("nft_token", () => {
 
   const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
   const whirlpool = new anchor.web3.PublicKey("7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm");
-  const usdc = new anchor.web3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   const sol = new anchor.web3.PublicKey("So11111111111111111111111111111111111111112");
+  const usdc = new anchor.web3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   const tokenVaultA = new anchor.web3.PublicKey("9RfZwn2Prux6QesG1Noo4HzMEBv3rPndJ2bN2Wwd6a7p");
   const tokenVaultB = new anchor.web3.PublicKey("BVNo8ftg2LkkssnWT4ZWdtoFaevnfD6ExYeramwM27pe");
   const tickArrayLower = new anchor.web3.PublicKey("DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi");
@@ -35,8 +35,6 @@ describe("nft_token", () => {
 
       const ctx = WhirlpoolContext.withProvider(provider, orca);
       const client = buildWhirlpoolClient(ctx);
-
-      const tick_spacing = 64;
       const whirlpoolClient = await client.getPool(whirlpool);
 
       // Get the current price of the pool
@@ -166,7 +164,7 @@ describe("nft_token", () => {
     // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account has an NFT token
     const userPositionAccount = parsed.address;
-    console.log("ATA from for NFT:", userPositionAccount.toBase58());
+    console.log("User ATA for NFT:", userPositionAccount.toBase58());
 
     // Get the ATA of the userWallet address, and if it does not exist, create it
     // This account will have bridged tokens
@@ -184,7 +182,7 @@ describe("nft_token", () => {
     let balance = await program.methods.getBalance()
       .accounts({account: userPositionAccount})
       .view();
-    console.log("ATA from must have one NFT, balance:", balance.toNumber());
+    console.log("User ATA must have one NFT, balance:", balance.toNumber());
 
     // ATA for the PDA to store the position NFT
     const pdaPositionAccount = await getOrCreateAssociatedTokenAccount(
@@ -195,6 +193,26 @@ describe("nft_token", () => {
       true // allowOwnerOfCurve - allow pda accounts to be have associated token account
     );
     console.log("PDA ATA", pdaPositionAccount.address.toBase58());
+
+    // Get the tokenA ATA of the userWallet address, and if it does not exist, create it
+    // This account will have bridged tokens
+    const userTokenAccountA = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        userWallet,
+        token_a.mint,
+        userWallet.publicKey
+    );
+    console.log("User ATA for tokenA:", userTokenAccountA.address.toBase58());
+
+    // Get the tokenA ATA of the userWallet address, and if it does not exist, create it
+    // This account will have bridged tokens
+    const userTokenAccountB = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        userWallet,
+        token_b.mint,
+        userWallet.publicKey
+    );
+    console.log("User ATA for tokenB:", userTokenAccountB.address.toBase58());
 
     // Get the status of the position
     const positionSDK = await client.getPosition(position.publicKey);
@@ -257,10 +275,40 @@ describe("nft_token", () => {
 //
 //  // Output the liquidity after transaction execution
 //  console.log("liquidity(after):", (await positionSDK.refreshData()).liquidity.toString());
+
+//    const bBalalnce = new anchor.BN("20000000");
+//    try {
+//        signature = await program.methods.decreaseLiquidity(bBalalnce)
+//          .accounts(
+//              {
+//                dataAccount: pdaProgram,
+//                whirlpool_programId: orca,
+//                pool: decrease_liquidity_tx.instructions[2].instructions[0].keys[0].pubkey,
+//                tokenProgramId: decrease_liquidity_tx.instructions[2].instructions[0].keys[1].pubkey,
+//                position: decrease_liquidity_tx.instructions[2].instructions[0].keys[3].pubkey,
+//                userWallet: decrease_liquidity_tx.instructions[2].instructions[0].keys[2].pubkey,
+//                pdaPositionAccount: decrease_liquidity_tx.instructions[2].instructions[0].keys[4].pubkey,
+//                userTokenAccountA: decrease_liquidity_tx.instructions[2].instructions[0].keys[5].pubkey,
+//                userTokenAccountB: decrease_liquidity_tx.instructions[2].instructions[0].keys[6].pubkey,
+//                tokenVaultA: decrease_liquidity_tx.instructions[2].instructions[0].keys[7].pubkey,
+//                tokenVaultB: decrease_liquidity_tx.instructions[2].instructions[0].keys[8].pubkey,
+//                tickArrayLower: decrease_liquidity_tx.instructions[2].instructions[0].keys[9].pubkey,
+//                tickArrayUpper: decrease_liquidity_tx.instructions[2].instructions[0].keys[10].pubkey
+//              }
+//          )
+//          .signers([userWallet])
+//          .rpc();
+//    } catch (error) {
+//        if (error instanceof Error && "message" in error) {
+//            console.error("Program Error:", error);
+//            console.error("Error Message:", error.message);
+//        } else {
+//            console.error("Transaction Error:", error);
+//        }
+//    }
 //  return;
 
     // ############################## DEPOSIT ##############################
-    
     console.log("\nSending position NFT to the program in exchange of bridged tokens");
     await program.methods.deposit()
       .accounts(
@@ -277,7 +325,7 @@ describe("nft_token", () => {
       )
       .signers([userWallet])
       .rpc();
-      
+
     balance = await program.methods.getBalance()
       .accounts({account: pdaPositionAccount.address})
       .view();
@@ -301,27 +349,6 @@ describe("nft_token", () => {
 
 
     // ############################## WITHDRAW ##############################
-    
-    // Get the tokenA ATA of the userWallet address, and if it does not exist, create it
-    // This account will have bridged tokens
-    const userTokenAccountA = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        userWallet,
-        token_a.mint,
-        userWallet.publicKey
-    );
-    console.log("User ATA for tokenA:", userTokenAccountA.address.toBase58());
-
-    // Get the tokenA ATA of the userWallet address, and if it does not exist, create it
-    // This account will have bridged tokens
-    const userTokenAccountB = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        userWallet,
-        token_b.mint,
-        userWallet.publicKey
-    );
-    console.log("User ATA for tokenB:", userTokenAccountB.address.toBase58());
-
     console.log("\nSending bridged tokens back to the program in exchange of the NFT");
     // Transfer bridged tokens from the user to the program, decrease the position and send tokens back to the user
     const tBalalnce = new anchor.BN("20000000");

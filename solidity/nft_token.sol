@@ -87,13 +87,13 @@ contract nft_token {
 
         // Check the PDA ownership
         if (position.owner != orca) {
-            revert("Wrong pda owner");
+            revert("Wrong PDA owner");
         }
 
         // Check the PDA header data
         uint64 header = position.data.readUint64LE(0);
         if (header != pdaHeader) {
-            revert("Wrong pda header");
+            revert("Wrong PDA header");
         }
 
         // Check the PDA address correctness
@@ -143,6 +143,36 @@ contract nft_token {
         positionAccounts[numPositionAccounts] = positionAddress;
         numPositionAccounts++;
     }
+
+//    @mutableAccount(pool)
+//    @mutableAccount(tokenProgramId)
+//    @mutableAccount(position)
+//    @mutableAccount(pdaPositionAccount)
+//    @mutableAccount(userTokenAccountA)
+//    @mutableAccount(userTokenAccountB)
+//    @mutableAccount(tokenVaultA)
+//    @mutableAccount(tokenVaultB)
+//    @mutableAccount(tickArrayLower)
+//    @mutableAccount(tickArrayUpper)
+//    @signer(userWallet)
+//    // Transfer with PDA
+//    function decreaseLiquidity(uint64 amount) external {
+//        // Decrease the position liquidity
+//        AccountMeta[11] metasDecreaseLiquidity = [
+//        AccountMeta({pubkey: tx.accounts.pool.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.tokenProgramId.key, is_writable: false, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.userWallet.key, is_writable: false, is_signer: true}),
+//        AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
+//        AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
+//        ];
+//        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(amount, 0, 0);
+//    }
 
     @mutableAccount(pool)
     @mutableAccount(tokenProgramId)
@@ -275,9 +305,10 @@ contract nft_token {
         return _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
     }
 
-    function getLiquidityAmountsAndPositions(uint64 amount) external view returns (uint64[], address[]) {
+    function getLiquidityAmountsAndPositions(uint64 amount) external view returns (uint64[], address[], address[]) {
         uint64 totalLiquidity = 0;
         uint64 numPositions = 0;
+        uint64 amountLeft = amount;
 
         // Get the number of allocated positions
         for (uint64 i = firstAvailablePositionAccountIndex; i < numPositionAccounts; ++i) {
@@ -287,15 +318,24 @@ contract nft_token {
             numPositions++;
             if (totalLiquidity >= amount) {
                 break;
+            } else {
+                amountLeft -= positionLiquidity;
             }
         }
 
         // Allocate the necessary arrays and fill the values
         address[] positionAddresses = new address[](numPositions);
         uint64[] positionAmounts = new uint64[](numPositions);
+        address[] positionPdaAtas = new address[](numPositions);
         for (uint64 i = 0; i < numPositions; ++i) {
             positionAddresses[i] = positionAccounts[firstAvailablePositionAccountIndex + i];
             positionAmounts[i] = mapPositionAccountLiquidity[positionAddresses[i]];
+            positionPdaAtas[i] = mapPositionAccountPdaAta[positionAddresses[i]];
+        }
+
+        // Adjust the last position, if it was not fully allocated
+        if (amountLeft > 0) {
+            positionAmounts[numPositions - 1] = amountLeft;
         }
     }
 
