@@ -27,6 +27,13 @@ Then, execute the testing script:
 solana airdrop 10000 9fit3w7t6FHATDaZWotpWqN7NpqgL3Lm1hqUop4hAy8h --url localhost && anchor test --skip-local-validator
 ```
 
+For debugging, after run local validator:
+```
+solana logs -v --url localhost GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb
+solana logs -v --url localhost whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+
+```
+
 If the `@programId` in nft_token.sol does not match with the deployed one, update it and re-run
 ```
 anchor build
