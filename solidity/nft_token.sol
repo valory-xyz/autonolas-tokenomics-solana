@@ -1,5 +1,4 @@
 import "./library/spl_token.sol";
-import "./library/system_instruction.sol";
 import "./interfaces/whirlpool.sol";
 
 struct Position {
@@ -116,7 +115,10 @@ contract nft_token {
         // Get the position data based on provided accounts
         Position positionData = _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
 
-        // TODO: Do the liquidity check for max(uint64) value as it is provided as uint128 from the LP provider
+        // Check that the liquidity is within uint64 bounds
+        if (positionData.liquidity > type(uint64).max) {
+            revert("Liquidity overflow");
+        }
         uint64 positionLiquidity = uint64(positionData.liquidity);
 
         // Transfer the position NFT to the pdaPositionAccount address of this program
@@ -142,39 +144,6 @@ contract nft_token {
         mapPositionAccountPdaAta[positionAddress] = pdaPositionAta;
         positionAccounts[numPositionAccounts] = positionAddress;
         numPositionAccounts++;
-    }
-
-    @mutableAccount(whirlpool)
-    @account(token_program)
-    @signer(positionAuthority)
-    @mutableAccount(position)
-    @account(positionTokenAccount)
-    @mutableAccount(tokenOwnerAccountA)
-    @mutableAccount(tokenOwnerAccountB)
-    @mutableAccount(tokenVaultA)
-    @mutableAccount(tokenVaultB)
-    @mutableAccount(tickArrayLower)
-    @mutableAccount(tickArrayUpper)
-    // Transfer with PDA
-    function decreaseLiquidity(uint128 amount, uint64 minA, uint64 minB) external {
-        // Decrease the position liquidity
-        AccountMeta[11] metasDecreaseLiquidity = [
-        AccountMeta({pubkey: tx.accounts.whirlpool.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.token_program.key, is_writable: false, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.positionAuthority.key, is_writable: false, is_signer: true}),
-        AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.positionTokenAccount.key, is_writable: false, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountA.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountB.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
-        ];
-        // a026d06f685b2c01 - decreaseLiquidity, eff0ae00000000000000000000000000 - amount, aaf1950200000000 - minA, b8522d0000000000 - minB
-        //bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
-        //orca.call{accounts: metasDecreaseLiquidity}(bincode);
-        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity}(amount, minA, minB);
     }
 
     @mutableAccount(pool)
@@ -214,7 +183,7 @@ contract nft_token {
 
         // Check the requested amount to be smaller or equal than the position liquidity
         if (amount > positionLiquidity) {
-            revert("Amount exceeds the position liquidity");
+            revert("Amount exceeds a position liquidity");
         }
 
         // Check the pdaBridgedTokenAccount address
@@ -308,9 +277,11 @@ contract nft_token {
         return _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
     }
 
-    function getLiquidityAmountsAndPositions(uint64 amount) external view returns (uint64[], address[], address[]) {
+    function getLiquidityAmountsAndPositions(uint64 amount)
+        external view returns (uint64[] positionAmounts, address[] positionAddresses, address[]positionPdaAtas)
+    {
         uint64 totalLiquidity = 0;
-        uint64 numPositions = 0;
+        uint32 numPositions = 0;
         uint64 amountLeft = amount;
 
         // Get the number of allocated positions
@@ -327,9 +298,9 @@ contract nft_token {
         }
 
         // Allocate the necessary arrays and fill the values
-        address[] positionAddresses = new address[](numPositions);
-        uint64[] positionAmounts = new uint64[](numPositions);
-        address[] positionPdaAtas = new address[](numPositions);
+        positionAddresses = new address[](numPositions);
+        positionAmounts = new uint64[](numPositions);
+        positionPdaAtas = new address[](numPositions);
         for (uint64 i = 0; i < numPositions; ++i) {
             positionAddresses[i] = positionAccounts[firstAvailablePositionAccountIndex + i];
             positionAmounts[i] = mapPositionAccountLiquidity[positionAddresses[i]];

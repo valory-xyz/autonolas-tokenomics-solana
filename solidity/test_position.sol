@@ -1,14 +1,12 @@
-import "./library/spl_token.sol";
-
 struct Position {
-    address whirlpool;     // 32
-    address position_mint; // 32
-    uint128 liquidity;       // 16
+    address whirlpool;      // 32
+    address position_mint;  // 32
+    uint128 liquidity;      // 16
     int32 tick_lower_index; // 4
     int32 tick_upper_index; // 4
 }
 
-contract positions {
+contract test_position {
     Position public position;
 
     @payer(payer)
