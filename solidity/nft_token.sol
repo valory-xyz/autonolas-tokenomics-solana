@@ -144,35 +144,38 @@ contract nft_token {
         numPositionAccounts++;
     }
 
-//    @mutableAccount(pool)
-//    @mutableAccount(tokenProgramId)
-//    @mutableAccount(position)
-//    @mutableAccount(pdaPositionAccount)
-//    @mutableAccount(userTokenAccountA)
-//    @mutableAccount(userTokenAccountB)
-//    @mutableAccount(tokenVaultA)
-//    @mutableAccount(tokenVaultB)
-//    @mutableAccount(tickArrayLower)
-//    @mutableAccount(tickArrayUpper)
-//    @signer(userWallet)
-//    // Transfer with PDA
-//    function decreaseLiquidity(uint64 amount) external {
-//        // Decrease the position liquidity
-//        AccountMeta[11] metasDecreaseLiquidity = [
-//        AccountMeta({pubkey: tx.accounts.pool.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.tokenProgramId.key, is_writable: false, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.userWallet.key, is_writable: false, is_signer: true}),
-//        AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.pdaPositionAccount.key, is_writable: false, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.userTokenAccountA.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.userTokenAccountB.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
-//        AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
-//        ];
-//        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(amount, 0, 0);
-//    }
+    @mutableAccount(whirlpool)
+    @account(token_program)
+    @signer(positionAuthority)
+    @mutableAccount(position)
+    @account(positionTokenAccount)
+    @mutableAccount(tokenOwnerAccountA)
+    @mutableAccount(tokenOwnerAccountB)
+    @mutableAccount(tokenVaultA)
+    @mutableAccount(tokenVaultB)
+    @mutableAccount(tickArrayLower)
+    @mutableAccount(tickArrayUpper)
+    // Transfer with PDA
+    function decreaseLiquidity(uint128 amount, uint64 minA, uint64 minB) external {
+        // Decrease the position liquidity
+        AccountMeta[11] metasDecreaseLiquidity = [
+        AccountMeta({pubkey: tx.accounts.whirlpool.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.token_program.key, is_writable: false, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.positionAuthority.key, is_writable: false, is_signer: true}),
+        AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.positionTokenAccount.key, is_writable: false, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountA.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountB.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
+        AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
+        ];
+        // a026d06f685b2c01 - decreaseLiquidity, eff0ae00000000000000000000000000 - amount, aaf1950200000000 - minA, b8522d0000000000 - minB
+        //bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
+        //orca.call{accounts: metasDecreaseLiquidity}(bincode);
+        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity}(amount, minA, minB);
+    }
 
     @mutableAccount(pool)
     @mutableAccount(tokenProgramId)

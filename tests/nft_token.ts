@@ -242,29 +242,31 @@ describe("nft_token", () => {
     console.log("\tamountA:", DecimalUtil.fromBN(amounts.tokenA, token_a.decimals).toString());
     console.log("\tamountB:", DecimalUtil.fromBN(amounts.tokenB, token_b.decimals).toString());
 
-//  // Set the percentage of liquidity to be withdrawn (30%)
-//  const delta_liquidity = data.liquidity.mul(new anchor.BN(30)).div(new anchor.BN(100));
-//  console.log(delta_liquidity.toNumber());
-//
-//  quote = decreaseLiquidityQuoteByLiquidityWithParams({
-//    // Pass the pool state as is
-//    sqrtPrice: whirlpool_data.sqrtPrice,
-//    tickCurrentIndex: whirlpool_data.tickCurrentIndex,
-//    // Pass the price range of the position as is
-//    tickLowerIndex: data.tickLowerIndex,
-//    tickUpperIndex: data.tickUpperIndex,
-//    // Liquidity to be withdrawn
-//    liquidity: delta_liquidity,
-//    // Acceptable slippage
-//    slippageTolerance: slippage,
-//  });
-//  console.log(quote);
-//
-//  // Create a transaction
-//  const decrease_liquidity_tx = await positionSDK.decreaseLiquidity(quote);
-//  console.log(decrease_liquidity_tx.instructions[2].instructions);
-//  console.log(decrease_liquidity_tx.instructions[2].instructions[0].keys);
-//
+  // Set the percentage of liquidity to be withdrawn (30%)
+  const delta_liquidity = data.liquidity.mul(new anchor.BN(30)).div(new anchor.BN(100));
+  console.log(delta_liquidity.toNumber());
+
+  quote = decreaseLiquidityQuoteByLiquidityWithParams({
+    // Pass the pool state as is
+    sqrtPrice: whirlpool_data.sqrtPrice,
+    tickCurrentIndex: whirlpool_data.tickCurrentIndex,
+    // Pass the price range of the position as is
+    tickLowerIndex: data.tickLowerIndex,
+    tickUpperIndex: data.tickUpperIndex,
+    // Liquidity to be withdrawn
+    liquidity: delta_liquidity,
+    // Acceptable slippage
+    slippageTolerance: slippage,
+  });
+  console.log("quote", quote);
+
+  // Create a transaction
+  const decrease_liquidity_tx = await positionSDK.decreaseLiquidity(quote);
+  // Overwrite the tokenA ATA as it is the only difference
+  //decrease_liquidity_tx.instructions[2].instructions[0].keys[5].pubkey = userTokenAccountA.address;
+  console.log(decrease_liquidity_tx.instructions[2].instructions);
+  console.log(decrease_liquidity_tx.instructions[2].instructions[0].keys);
+
 //  // Send the transaction
 //  signature = await decrease_liquidity_tx.buildAndExecute();
 //  console.log("signature:", signature);
@@ -276,55 +278,70 @@ describe("nft_token", () => {
 //  // Output the liquidity after transaction execution
 //  console.log("liquidity(after):", (await positionSDK.refreshData()).liquidity.toString());
 
-//    const bBalalnce = new anchor.BN("20000000");
-//    try {
-//        signature = await program.methods.decreaseLiquidity(bBalalnce)
-//          .accounts(
-//              {
-//                dataAccount: pdaProgram,
-//                whirlpool_programId: orca,
-//                pool: decrease_liquidity_tx.instructions[2].instructions[0].keys[0].pubkey,
-//                tokenProgramId: decrease_liquidity_tx.instructions[2].instructions[0].keys[1].pubkey,
-//                position: decrease_liquidity_tx.instructions[2].instructions[0].keys[3].pubkey,
-//                userWallet: decrease_liquidity_tx.instructions[2].instructions[0].keys[2].pubkey,
-//                pdaPositionAccount: decrease_liquidity_tx.instructions[2].instructions[0].keys[4].pubkey,
-//                userTokenAccountA: decrease_liquidity_tx.instructions[2].instructions[0].keys[5].pubkey,
-//                userTokenAccountB: decrease_liquidity_tx.instructions[2].instructions[0].keys[6].pubkey,
-//                tokenVaultA: decrease_liquidity_tx.instructions[2].instructions[0].keys[7].pubkey,
-//                tokenVaultB: decrease_liquidity_tx.instructions[2].instructions[0].keys[8].pubkey,
-//                tickArrayLower: decrease_liquidity_tx.instructions[2].instructions[0].keys[9].pubkey,
-//                tickArrayUpper: decrease_liquidity_tx.instructions[2].instructions[0].keys[10].pubkey
-//              }
-//          )
-//          .signers([userWallet])
-//          .rpc();
-//    } catch (error) {
-//        if (error instanceof Error && "message" in error) {
-//            console.error("Program Error:", error);
-//            console.error("Error Message:", error.message);
-//        } else {
-//            console.error("Transaction Error:", error);
-//        }
-//    }
-//  return;
+    try {
+        signature = await program.methods.decreaseLiquidity(quote.liquidityAmount, quote.tokenMinA, quote.tokenMinB)
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                whirlpool_programId: orca,
+                whirlpool: decrease_liquidity_tx.instructions[2].instructions[0].keys[0].pubkey,
+                token_program: decrease_liquidity_tx.instructions[2].instructions[0].keys[1].pubkey,
+                positionAuthority: decrease_liquidity_tx.instructions[2].instructions[0].keys[2].pubkey,
+                position: decrease_liquidity_tx.instructions[2].instructions[0].keys[3].pubkey,
+                positionTokenAccount: decrease_liquidity_tx.instructions[2].instructions[0].keys[4].pubkey,
+                tokenOwnerAccountA: decrease_liquidity_tx.instructions[2].instructions[0].keys[5].pubkey,
+                tokenOwnerAccountB: decrease_liquidity_tx.instructions[2].instructions[0].keys[6].pubkey,
+                tokenVaultA: decrease_liquidity_tx.instructions[2].instructions[0].keys[7].pubkey,
+                tokenVaultB: decrease_liquidity_tx.instructions[2].instructions[0].keys[8].pubkey,
+                tickArrayLower: decrease_liquidity_tx.instructions[2].instructions[0].keys[9].pubkey,
+                tickArrayUpper: decrease_liquidity_tx.instructions[2].instructions[0].keys[10].pubkey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {
+        if (error instanceof Error && "message" in error) {
+            console.error("Program Error:", error);
+            console.error("Error Message:", error.message);
+        } else {
+            console.error("Transaction Error:", error);
+        }
+    }
+  return;
 
     // ############################## DEPOSIT ##############################
     console.log("\nSending position NFT to the program in exchange of bridged tokens");
-    await program.methods.deposit()
-      .accounts(
-          {
-            dataAccount: pdaProgram,
-            userPositionAccount: userPositionAccount,
-            pdaPositionAccount: pdaPositionAccount.address,
-            userBridgedTokenAccount: userBridgedTokenAccount.address,
-            bridgedTokenMint: bridgedTokenMint,
-            position: position.publicKey,
-            positionMint: positionMint,
-            userWallet: userWallet.publicKey
-          }
-      )
-      .signers([userWallet])
-      .rpc();
+    try {
+        signature = await program.methods.deposit()
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                userPositionAccount: userPositionAccount,
+                pdaPositionAccount: pdaPositionAccount.address,
+                userBridgedTokenAccount: userBridgedTokenAccount.address,
+                bridgedTokenMint: bridgedTokenMint,
+                position: position.publicKey,
+                positionMint: positionMint,
+                userWallet: userWallet.publicKey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {
+        if (error instanceof Error && "message" in error) {
+            console.error("Program Error:", error);
+            console.error("Error Message:", error.message);
+        } else {
+            console.error("Transaction Error:", error);
+        }
+    }
+
+    console.log("Deposit tx signature", signature);
+    // Wait for program creation confirmation
+    await provider.connection.confirmTransaction({
+        signature: signature,
+        ...(await provider.connection.getLatestBlockhash()),
+    });
 
     balance = await program.methods.getBalance()
       .accounts({account: pdaPositionAccount.address})
@@ -387,6 +404,7 @@ describe("nft_token", () => {
             console.error("Transaction Error:", error);
         }
     }
+    console.log("Withdraw tx signature", signature);
 
 //    balance = await program.methods.getBalance()
 //      .accounts({account: pdaBridgedTokenAccount.address})
