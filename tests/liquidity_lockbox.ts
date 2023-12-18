@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { NftToken } from "../target/types/nft_token";
+import { LiquidityLockbox } from "../target/types/liquidity_lockbox";
+import { TestPosition } from "../target/types/test_position";
 import { createMint, mintTo, transfer, getOrCreateAssociatedTokenAccount, unpackAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import {
   WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID,
@@ -11,13 +12,14 @@ import { DecimalUtil, Percentage } from "@orca-so/common-sdk";
 import Decimal from "decimal.js";
 import expect from "expect";
 
-describe("nft_token", () => {
+describe("Liquidity Lockbox", () => {
   // Configure the client to use the local cluster.
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   console.log("Provider wallet:", provider.wallet.payer.publicKey.toBase58());
-  const program = anchor.workspace.NftToken as Program<NftToken>;
+  const program = anchor.workspace.LiquidityLockbox as Program<LiquidityLockbox>;
+  const positionProgram = anchor.workspace.TestPosition as Program<TestPosition>;
 
   const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
   const whirlpool = new anchor.web3.PublicKey("7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm");
@@ -28,7 +30,7 @@ describe("nft_token", () => {
   const tickArrayLower = new anchor.web3.PublicKey("DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi");
   const tickArrayUpper = new anchor.web3.PublicKey("ZPyVkTuj9TBr1ER4Fnubyz1w7bm5LsXctLiZb8Fs2Do");
 
-  it("Adding and removing liquidity", async () => {
+  it("Adding liquidity to the Lockbox in exchange of tokens and decreasing it when getting tokens back", async () => {
     // User wallet is the provider payer
     const userWallet = provider.wallet.payer;
     console.log("User wallet:", userWallet.publicKey.toBase58());
@@ -89,10 +91,8 @@ describe("nft_token", () => {
         upper_tick_index,
         quote
       );
-      //console.log(quote);
 
-
-      // Send the transaction
+      // Send the transaction to open a position
       let signature = await open_position_tx.tx.buildAndExecute();
       console.log("signature:", signature);
       console.log("position NFT:", open_position_tx.positionMint.toBase58());
@@ -122,6 +122,15 @@ describe("nft_token", () => {
     );
     console.log("PDA ATA for bridged token:", pdaBridgedTokenAccount.address.toBase58());
 
+    // Try to deploy the program with incorrect seed
+    try {
+        signature = await program.methods
+          .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes + "1")
+          .accounts({ dataAccount: pdaProgram })
+          .rpc();
+    } catch (error) {}
+
+    // Deploy the LiquidityLockbox program
     try {
         signature = await program.methods
           .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes)
@@ -155,7 +164,6 @@ describe("nft_token", () => {
             break;
         }
     }
-
 
     // NFT position mint
     let accountInfo = await provider.connection.getAccountInfo(positionMint);
@@ -281,6 +289,78 @@ describe("nft_token", () => {
 
     // ############################## DEPOSIT ##############################
     console.log("\nSending position NFT to the program in exchange of bridged tokens");
+
+    const positionDataAccount = anchor.web3.Keypair.generate();
+
+    // Create pseudo-position corresponding to the NFT
+    await positionProgram.methods
+      .new(whirlpool, positionMint)
+      .accounts({ dataAccount: positionDataAccount.publicKey })
+      .signers([positionDataAccount])
+      .rpc();
+
+    // Try to lock a position with a wrong position data account
+    try {
+        signature = await program.methods.deposit()
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                userPositionAccount: userPositionAccount.address,
+                pdaPositionAccount: pdaPositionAccount.address,
+                userBridgedTokenAccount: userBridgedTokenAccount.address,
+                bridgedTokenMint: bridgedTokenMint,
+                position: positionDataAccount.publicKey,
+                positionMint: positionMint,
+                userWallet: userWallet.publicKey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {}
+
+    // Try to pass another user ATA with a mint that is different from the position mint
+    try {
+        signature = await program.methods.deposit()
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                userPositionAccount: userTokenAccountA.address,
+                pdaPositionAccount: pdaPositionAccount.address,
+                userBridgedTokenAccount: userBridgedTokenAccount.address,
+                bridgedTokenMint: bridgedTokenMint,
+                position: position.publicKey,
+                positionMint: positionMint,
+                userWallet: userWallet.publicKey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {}
+
+    // Try to pass user position ATA instead of the PDA position ATA
+    try {
+        signature = await program.methods.deposit()
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                userPositionAccount: userPositionAccount,
+                pdaPositionAccount: userPositionAccount,
+                userBridgedTokenAccount: userBridgedTokenAccount.address,
+                bridgedTokenMint: bridgedTokenMint,
+                position: position.publicKey,
+                positionMint: positionMint,
+                userWallet: userWallet.publicKey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {}
+
+//    accountInfo = await provider.connection.getAccountInfo(pdaPositionAccount.address);
+//    console.log(accountInfo);
+//    return;
+
+    // Execute the correct deposit tx
     try {
         signature = await program.methods.deposit()
           .accounts(
