@@ -43,6 +43,8 @@ contract liquidity_lockbox {
     uint32 public numPositionAccounts;
     // First available account index in the set of accounts;
     uint32 public firstAvailablePositionAccountIndex;
+    // Total liquidity in a lockbox
+    uint64 public totalLiquidity;
 
     //
     mapping(address => uint64) public mapPositionAccountLiquidity;
@@ -127,6 +129,7 @@ contract liquidity_lockbox {
         }
     }
 
+    /// @dev Deposits the position mint (NFT) in order to get a corresponding liquidity amount of bridged tokens
     @mutableAccount(userPositionAccount)
     @mutableAccount(pdaPositionAccount)
     @mutableAccount(userBridgedTokenAccount)
@@ -164,7 +167,7 @@ contract liquidity_lockbox {
             tx.accounts.userWallet.key,
             1);
 
-        // Transfer bridged tokens to the user
+        // Mint bridged tokens to the user
         SplToken.pda_mint_to(
             bridgedTokenMint,
             tx.accounts.userBridgedTokenAccount.key,
@@ -179,16 +182,21 @@ contract liquidity_lockbox {
         address pdaPositionAta = tx.accounts.pdaPositionAccount.key;
         mapPositionAccountPdaAta[positionAddress] = pdaPositionAta;
         positionAccounts[numPositionAccounts] = positionAddress;
+
+        // Increase the total number of positions
         numPositionAccounts++;
+        // Increase the amount of total liquidity
+        totalLiquidity += positionLiquidity;
     }
 
+    /// @dev Withdraws LP tokens separately to each token ATA and burns provided bridge tokens.
+    /// @param amount Bridged token amount.
     @mutableAccount(pool)
-    @mutableAccount(tokenProgramId)
+    @account(tokenProgramId)
     @mutableAccount(position)
     @mutableAccount(userBridgedTokenAccount)
     @mutableAccount(pdaBridgedTokenAccount)
     @mutableAccount(userWallet)
-    @mutableAccount(userPositionAccount)
     @mutableAccount(bridgedTokenMint)
     @mutableAccount(pdaPositionAccount)
     @mutableAccount(userTokenAccountA)
@@ -199,7 +207,6 @@ contract liquidity_lockbox {
     @mutableAccount(tickArrayUpper)
     @mutableAccount(positionMint)
     @signer(sig)
-    // Transfer with PDA
     function withdraw(uint64 amount) external {
         address positionAddress = positionAccounts[firstAvailablePositionAccountIndex];
         if (positionAddress != tx.accounts.position.key) {
@@ -210,6 +217,12 @@ contract liquidity_lockbox {
         if (mapPositionAccountPdaAta[positionAddress] != pdaPositionAta) {
             revert("Wrong position ATA");
         }
+
+        // TODO: Check that the mint of the PDA position ATA matches the position mint
+        address positionMint = tx.accounts.pdaPositionAccount.data.readAddress(0);
+//        if (positionMint != tx.accounts.positionMint.key) {
+//            revert("Wrong position mint account");
+//        }
 
         uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
         // Check that the token account exists
@@ -232,12 +245,20 @@ contract liquidity_lockbox {
             revert("Pool address is incorrect");
         }
 
+//        // Check that the bridged token mint account is correct
+//        if (tx.accounts.bridgedTokenMint.key != bridgedTokenMint) {
+//            revert("Wrong bridged token mint account");
+//        }
+
         // Transfer bridged tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
             tx.accounts.userBridgedTokenAccount.key,
             pdaBridgedTokenAccount,
             tx.accounts.userWallet.key,
             amount);
+
+        // Decrease the total liquidity amount
+        totalLiquidity -= amount;
 
         // Burn acquired bridged tokens
         SplToken.pda_burn(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
@@ -257,8 +278,8 @@ contract liquidity_lockbox {
             AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
         ];
         // a026d06f685b2c01 - decreaseLiquidity, eff0ae00000000000000000000000000 - amount, aaf1950200000000 - minA, b8522d0000000000 - minB
-//        bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
-//        orca.call{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(bincode);
+        // bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
+        // orca.call{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(bincode);
         whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity, seeds: [[pdaProgramSeed, pdaBump]]}(amount, 0, 0);
 
         // Update the token remainder
@@ -307,29 +328,43 @@ contract liquidity_lockbox {
         }
     }
 
+    /// @dev Gets the position data.
+    /// @return Position data.
     @account(position)
     @account(positionMint)
     function getPositionData() external view returns (Position) {
         return _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
     }
 
+    /// @dev Gets liquidity amounts and position accounts in order to correctly withdraw a specified liquidity amount.
+    /// @param amount Liquidity amount to withdraw.
+    /// @return positionAmounts Position amounts.
+    /// @return positionAddresses Position mint addresses.
+    /// @return positionPdaAtas Position PDA ATA-s controlled by the program.
     function getLiquidityAmountsAndPositions(uint64 amount)
-        external view returns (uint64[] positionAmounts, address[] positionAddresses, address[]positionPdaAtas)
+        external view returns (uint64[] positionAmounts, address[] positionAddresses, address[] positionPdaAtas)
     {
-        uint64 totalLiquidity = 0;
+        if (amount > totalLiquidity) {
+            revert ("Requested amount is too big for the total available liquidity");
+        }
+
+        uint64 liquiditySum = 0;
         uint32 numPositions = 0;
-        uint64 amountLeft = amount;
+        uint64 amountLeft = 0;
 
         // Get the number of allocated positions
         for (uint32 i = firstAvailablePositionAccountIndex; i < numPositionAccounts; ++i) {
             address positionAddress = positionAccounts[i];
             uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
-            totalLiquidity += positionLiquidity;
+
+            // Increase a total calculated liquidity and a number of positions to return
+            liquiditySum += positionLiquidity;
             numPositions++;
-            if (totalLiquidity >= amount) {
+
+            // Check if the accumulated liquidity is enough to cover the requested amount
+            if (liquiditySum >= amount) {
+                amountLeft = liquiditySum - amount;
                 break;
-            } else {
-                amountLeft -= positionLiquidity;
             }
         }
 
@@ -344,7 +379,7 @@ contract liquidity_lockbox {
         }
 
         // Adjust the last position, if it was not fully allocated
-        if (amountLeft > 0) {
+        if (numPositions > 0 && amountLeft > 0) {
             positionAmounts[numPositions - 1] = amountLeft;
         }
     }

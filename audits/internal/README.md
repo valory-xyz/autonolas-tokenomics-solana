@@ -82,9 +82,11 @@ positionMint not checked
 -- tokenVaultB
 -- tickArrayLower
 -- tickArrayUpper
+[x] fixed
 
 - Pay attention on getLiquidityAmountsAndPositions
 ```
             if (totalLiquidity >= amount) {
                 break;
 ```
+[x] fixed

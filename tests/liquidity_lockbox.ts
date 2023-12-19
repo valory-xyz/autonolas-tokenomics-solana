@@ -417,9 +417,17 @@ describe("Liquidity Lockbox", () => {
 
     // ############################## WITHDRAW ##############################
     console.log("\nSending bridged tokens back to the program in exchange of the NFT");
+
+    const bigBalance = new anchor.BN("4000000000");
+    // Try to get amounts and positions for a bigger provided liquidity amount than the total liquidity
+    try {
+        await program.methods.getLiquidityAmountsAndPositions(bigBalance)
+          .accounts({dataAccount: pdaProgram})
+          .view();
+    } catch (error) {}
+
     // Transfer bridged tokens from the user to the program, decrease the position and send tokens back to the user
     const tBalalnce = new anchor.BN("20000000");
-
     // Get the data for tBalance
     const result = await program.methods.getLiquidityAmountsAndPositions(tBalalnce)
       .accounts({dataAccount: pdaProgram})
@@ -427,6 +435,10 @@ describe("Liquidity Lockbox", () => {
     // Check the addresses
     expect(position.publicKey).toEqual(result.positionAddresses[0]);
     expect(pdaPositionAccount.address).toEqual(result.positionPdaAtas[0]);
+
+    console.log("pdaPositionAccount", pdaPositionAccount);
+    accountInfo = await provider.connection.getAccountInfo(pdaPositionAccount.address);
+    console.log(accountInfo);
 
     try {
         signature = await program.methods.withdraw(tBalalnce)
@@ -440,7 +452,6 @@ describe("Liquidity Lockbox", () => {
                 userBridgedTokenAccount: userBridgedTokenAccount.address,
                 pdaBridgedTokenAccount: pdaBridgedTokenAccount.address,
                 userWallet: userWallet.publicKey,
-                userPositionAccount: userPositionAccount,
                 bridgedTokenMint: bridgedTokenMint,
                 pdaPositionAccount: pdaPositionAccount.address,
                 userTokenAccountA: userTokenAccountA.address,

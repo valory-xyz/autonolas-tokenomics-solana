@@ -1,5 +1,11 @@
 # autonolas-tokenomics-solana
-Autonolas tokenomics contracts on Solana
+Autonolas tokenomics contracts on Solana.
+
+## Introduction
+This repository contain the liquidity lockbox set of contracts on Solana. The description of the concept can be found here:
+[Liquidity lockbox concept](https://github.com/valory-xyz/autonolas-tokenomics-solana/blob/main/docs/Bonding_mechanism_with_liquidity_on_Solana?raw=true).
+
+The repository is still under active development.
 
 ## Pre-requisites
 - Solang version: `v0.3.3`;
@@ -7,12 +13,12 @@ Autonolas tokenomics contracts on Solana
 - Anchor version: `anchor-cli 0.29.0`.
 
 ## Development
-Install the dependencies
+Install the dependencies:
 ```
 yarn
 ```
 
-Build the code with
+Build the code with:
 ```
 anchor build
 ```
@@ -38,3 +44,13 @@ If the `@programId` in nft_token.sol does not match with the deployed one, updat
 ```
 anchor build
 ```
+
+### Audits
+The audit is provided as development matures. The latest audit report can be found here: [audits](https://github.com/valory-xyz/autonolas-tokenomics-solana/blob/main/audits).
+A list of known vulnerabilities can be found here: [Vulnerabilities list](https://github.com/valory-xyz/autonolas-tokenomics-solana/blob/main/docs/Vulnerabilities_list_tokenomics-solana.pdf?raw=true).
+
+### Unfinished Product Warning
+The current version of the code fails when doing a CPI call to the Orca Whirlpool program in the `withdraw()` function.
+The issue is described here: [CPI issue](https://github.com/hyperledger/solang/issues/1610).
+
+For the moment, the `withdraw()` function testing is wrapped into a `try-catch` logic.
