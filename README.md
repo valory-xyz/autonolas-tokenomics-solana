@@ -48,7 +48,7 @@ anchor build
 The audit is provided as development matures. The latest audit report can be found here: [audits](https://github.com/valory-xyz/autonolas-tokenomics-solana/blob/main/audits).
 A list of known vulnerabilities can be found here: [Vulnerabilities list](https://github.com/valory-xyz/autonolas-tokenomics-solana/blob/main/docs/Vulnerabilities_list_tokenomics-solana.pdf?raw=true).
 
-### Unfinished Product Warning
+:warning: **Warning** <br />
 The current version of the code fails when doing a CPI call to the Orca Whirlpool program in the `withdraw()` function.
 The issue is described here: [CPI issue](https://github.com/hyperledger/solang/issues/1610).
 
