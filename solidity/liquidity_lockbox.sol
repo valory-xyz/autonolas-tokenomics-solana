@@ -1,12 +1,18 @@
 import "./library/spl_token.sol";
 import "./interfaces/whirlpool.sol";
 
+// Position struct
 struct Position {
-    address whirlpool;      // 32
-    address positionMint;   // 32
-    uint128 liquidity;      // 16
-    int32 tickLowerIndex;   // 4
-    int32 tickUpperIndex;   // 4
+    // Whirlpool (LP pool) address, 32 bytes
+    address whirlpool;
+    // Position mint (liquidity NFT) address, 32 bytes
+    address positionMint;
+    // Position liquidity, 16 bytes
+    uint128 liquidity;
+    // Tick lower index, 4 bytes
+    int32 tickLowerIndex;
+    /// Tick upper index, 4 bytes
+    int32 tickUpperIndex;
 }
 
 /// @dev The liquidity in the position cannot be practically bigger than the max of uint64 since
@@ -14,10 +20,15 @@ struct Position {
 
 @program_id("GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb")
 contract liquidity_lockbox {
+    // Orca whirlpool program address
     address public constant orca = address"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+    // Whirlpool (LP) pool address
     address public pool;
+    // Current program owned PDA account address
     address public pdaProgram;
+    // Bridged token mint address
     address public bridgedTokenMint;
+    // PDA bridged token account address
     address public pdaBridgedTokenAccount;
     // PDA header for position account
     uint64 public pdaHeader = 0xd0f7407ae48fbcaa;
@@ -29,10 +40,11 @@ contract liquidity_lockbox {
     int32 public constant maxTickLowerIndex = 443632;
 
     // Total number of token accounts (even those that hold no positions anymore)
-    uint64 public numPositionAccounts;
+    uint32 public numPositionAccounts;
     // First available account index in the set of accounts;
-    uint64 public firstAvailablePositionAccountIndex;
+    uint32 public firstAvailablePositionAccountIndex;
 
+    //
     mapping(address => uint64) public mapPositionAccountLiquidity;
     mapping(address => address) public mapPositionAccountPdaAta;
     address[type(uint32).max] public positionAccounts;
@@ -58,12 +70,17 @@ contract liquidity_lockbox {
             revert("Invalid bump");
         }
 
-        pdaBump = bump;
+        // Assign pda and bump
         pdaProgram = pda;
+        pdaBump = bump;
     }
 
     /// @dev Gets the position data.
+    /// @param position Position account.
+    /// @param positionMint Position mint (NFT).
+    /// @return positionData Position data.
     function _getPositionData(AccountInfo position, address positionMint) internal view returns (Position positionData) {
+        // Extract the position data
         positionData = Position({
             whirlpool: position.data.readAddress(8),
             positionMint: position.data.readAddress(40),
@@ -108,8 +125,6 @@ contract liquidity_lockbox {
         if (pdaPosition != position.key) {
             revert("Wrong position PDA");
         }
-
-        return positionData;
     }
 
     @mutableAccount(userPositionAccount)
@@ -150,7 +165,7 @@ contract liquidity_lockbox {
             1);
 
         // Transfer bridged tokens to the user
-        SplToken.mint_to_pda(
+        SplToken.pda_mint_to(
             bridgedTokenMint,
             tx.accounts.userBridgedTokenAccount.key,
             pdaProgram,
@@ -225,7 +240,7 @@ contract liquidity_lockbox {
             amount);
 
         // Burn acquired bridged tokens
-        SplToken.burn_pda(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
+        SplToken.pda_burn(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
 
         // Decrease the position liquidity
         AccountMeta[11] metasDecreaseLiquidity = [
@@ -306,7 +321,7 @@ contract liquidity_lockbox {
         uint64 amountLeft = amount;
 
         // Get the number of allocated positions
-        for (uint64 i = firstAvailablePositionAccountIndex; i < numPositionAccounts; ++i) {
+        for (uint32 i = firstAvailablePositionAccountIndex; i < numPositionAccounts; ++i) {
             address positionAddress = positionAccounts[i];
             uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
             totalLiquidity += positionLiquidity;
@@ -322,7 +337,7 @@ contract liquidity_lockbox {
         positionAddresses = new address[](numPositions);
         positionAmounts = new uint64[](numPositions);
         positionPdaAtas = new address[](numPositions);
-        for (uint64 i = 0; i < numPositions; ++i) {
+        for (uint32 i = 0; i < numPositions; ++i) {
             positionAddresses[i] = positionAccounts[firstAvailablePositionAccountIndex + i];
             positionAmounts[i] = mapPositionAccountLiquidity[positionAddresses[i]];
             positionPdaAtas[i] = mapPositionAccountPdaAta[positionAddresses[i]];

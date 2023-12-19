@@ -42,14 +42,14 @@ library SplToken {
 		CreateNativeMint // 31
 	}
 
-	/// @dev Mint new tokens. The transaction should be signed by the mint authority keypair
+	/// @dev Mint new tokens. The transaction should be signed by the PDA mint authority keypair
 	/// @param mint the account of the mint
 	/// @param account the token account where the minted tokens should go
 	/// @param authority the public key of the mint authority
 	/// @param amount the amount of tokens to mint
 	/// @param seed PDA seed
 	/// @param bump PDA bump
-	function mint_to_pda(address mint, address account, address authority, uint64 amount, bytes seed, bytes bump) internal {
+	function pda_mint_to(address mint, address account, address authority, uint64 amount, bytes seed, bytes bump) internal {
 		bytes instr = new bytes(9);
 		instr[0] = uint8(TokenInstruction.MintTo);
 		instr.writeUint64LE(amount, 1);
@@ -83,14 +83,14 @@ library SplToken {
 		tokenProgramId.call{accounts: metas}(instr);
 	}
 
-	/// @dev Burn @amount tokens in account. This transaction should be signed by the owner.
+	/// @dev Burn @amount tokens in account. This transaction should be signed by the PDA.
 	/// @param account the acount for which tokens should be burned
 	/// @param mint the mint for this token
 	/// @param owner the publickey of the account owner keypair
 	/// @param amount the amount to burn
 	/// @param seed PDA seed
 	/// @param bump PDA bump
-	function burn_pda(address account, address mint, address owner, uint64 amount, bytes seed, bytes bump) internal {
+	function pda_burn(address account, address mint, address owner, uint64 amount, bytes seed, bytes bump) internal {
 		bytes instr = new bytes(9);
 		instr[0] = uint8(TokenInstruction.Burn);
 		instr.writeUint64LE(amount, 1);
