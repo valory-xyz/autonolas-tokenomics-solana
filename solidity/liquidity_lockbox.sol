@@ -218,12 +218,6 @@ contract liquidity_lockbox {
             revert("Wrong position ATA");
         }
 
-        // TODO: Check that the mint of the PDA position ATA matches the position mint
-        address positionMint = tx.accounts.pdaPositionAccount.data.readAddress(0);
-//        if (positionMint != tx.accounts.positionMint.key) {
-//            revert("Wrong position mint account");
-//        }
-
         uint64 positionLiquidity = mapPositionAccountLiquidity[positionAddress];
         // Check that the token account exists
         if (positionLiquidity == 0) {
@@ -245,10 +239,10 @@ contract liquidity_lockbox {
             revert("Pool address is incorrect");
         }
 
-//        // Check that the bridged token mint account is correct
-//        if (tx.accounts.bridgedTokenMint.key != bridgedTokenMint) {
-//            revert("Wrong bridged token mint account");
-//        }
+        // Check that the bridged token mint account is correct
+        if (tx.accounts.bridgedTokenMint.key != bridgedTokenMint) {
+            revert("Wrong bridged token mint account");
+        }
 
         // Transfer bridged tokens to the pdaBridgedTokenAccount address of this program
         SplToken.transfer(
@@ -384,11 +378,13 @@ contract liquidity_lockbox {
         }
     }
 
+    /// @dev Gets token account balance.
     @account(account)
     function getBalance() external view returns (uint64) {
         return SplToken.get_balance(tx.accounts.account);
     }
 
+    /// @dev Gets total supply of a provided token account.
     @account(account)
     function totalSupply() external view returns (uint64) {
         return SplToken.total_supply(tx.accounts.account);

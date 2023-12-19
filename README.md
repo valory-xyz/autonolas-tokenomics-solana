@@ -37,10 +37,9 @@ For debugging, after run local validator:
 ```
 solana logs -v --url localhost GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb
 solana logs -v --url localhost whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
-
 ```
 
-If the `@programId` in nft_token.sol does not match with the deployed one, update it and re-run
+If the `@programId` in liquidity_lockbox.sol does not match with the deployed one, update it and re-run
 ```
 anchor build
 ```
@@ -54,3 +53,11 @@ The current version of the code fails when doing a CPI call to the Orca Whirlpoo
 The issue is described here: [CPI issue](https://github.com/hyperledger/solang/issues/1610).
 
 For the moment, the `withdraw()` function testing is wrapped into a `try-catch` logic.
+
+## Acknowledgements
+The liquidity lockbox contracts were inspired and based on the following sources:
+- [Solang](https://github.com/hyperledger/solang);
+- [Orca](https://github.com/orca-so/whirlpools);
+- [EverlastingsongSolsandbox](https://github.com/everlastingsong/solsandbox);
+- [Everlastingsong Microscope](https://everlastingsong.github.io/account-microscope);
+- [Everlastingsong Nebula](https://everlastingsong.github.io/nebula/).

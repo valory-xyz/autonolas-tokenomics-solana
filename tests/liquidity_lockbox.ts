@@ -358,7 +358,6 @@ describe("Liquidity Lockbox", () => {
 
 //    accountInfo = await provider.connection.getAccountInfo(pdaPositionAccount.address);
 //    console.log(accountInfo);
-//    return;
 
     // Execute the correct deposit tx
     try {
@@ -436,10 +435,36 @@ describe("Liquidity Lockbox", () => {
     expect(position.publicKey).toEqual(result.positionAddresses[0]);
     expect(pdaPositionAccount.address).toEqual(result.positionPdaAtas[0]);
 
-    console.log("pdaPositionAccount", pdaPositionAccount);
-    accountInfo = await provider.connection.getAccountInfo(pdaPositionAccount.address);
-    console.log(accountInfo);
+    // Try to execute the withdraw with the incorrect position address
+    try {
+        signature = await program.methods.withdraw(tBalalnce)
+          .accounts(
+              {
+                dataAccount: pdaProgram,
+                whirlpool_programId: orca,
+                pool: whirlpool,
+                tokenProgramId: TOKEN_PROGRAM_ID,
+                position: userBridgedTokenAccount.address,
+                userBridgedTokenAccount: userBridgedTokenAccount.address,
+                pdaBridgedTokenAccount: pdaBridgedTokenAccount.address,
+                userWallet: userWallet.publicKey,
+                bridgedTokenMint: bridgedTokenMint,
+                pdaPositionAccount: pdaPositionAccount.address,
+                userTokenAccountA: userTokenAccountA.address,
+                userTokenAccountB: userTokenAccountB.address,
+                tokenVaultA: tokenVaultA,
+                tokenVaultB: tokenVaultB,
+                tickArrayLower: tickArrayLower,
+                tickArrayUpper: tickArrayUpper,
+                positionMint: positionMint,
+                sig: userWallet.publicKey
+              }
+          )
+          .signers([userWallet])
+          .rpc();
+    } catch (error) {}
 
+    // Execute the correct withdraw tx
     try {
         signature = await program.methods.withdraw(tBalalnce)
           .accounts(
