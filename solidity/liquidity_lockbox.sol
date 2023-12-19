@@ -150,7 +150,7 @@ contract liquidity_lockbox {
             1);
 
         // Transfer bridged tokens to the user
-        SplToken.mint_to_pda(
+        SplToken.pda_mint_to(
             bridgedTokenMint,
             tx.accounts.userBridgedTokenAccount.key,
             pdaProgram,
@@ -225,7 +225,7 @@ contract liquidity_lockbox {
             amount);
 
         // Burn acquired bridged tokens
-        SplToken.burn_pda(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
+        SplToken.pda_burn(pdaBridgedTokenAccount, bridgedTokenMint, pdaProgram, amount, pdaProgramSeed, pdaBump);
 
         // Decrease the position liquidity
         AccountMeta[11] metasDecreaseLiquidity = [
