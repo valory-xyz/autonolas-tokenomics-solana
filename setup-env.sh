@@ -1,8 +1,8 @@
 #!/bin/bash
 
-RUSTVER="1.60"
-SOLANAVER="1.14.12"
-ANCHORVER="0.26.0"
+RUSTVER="1.70"
+SOLANAVER="1.17.7"
+ANCHORVER="0.29.0"
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup install $RUSTVER
