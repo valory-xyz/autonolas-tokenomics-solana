@@ -1,17 +1,19 @@
 import "./library/spl_token.sol";
-import "./library/system_instruction.sol";
 import "./interfaces/whirlpool.sol";
 
 struct Position {
     address whirlpool;      // 32
-    address position_mint;  // 32
+    address positionMint;   // 32
     uint128 liquidity;      // 16
-    int32 tick_lower_index; // 4
-    int32 tick_upper_index; // 4
+    int32 tickLowerIndex;   // 4
+    int32 tickUpperIndex;   // 4
 }
 
+/// @dev The liquidity in the position cannot be practically bigger than the max of uint64 since
+///      spl token functions are limited by the uint64 value.
+
 @program_id("GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb")
-contract nft_token {
+contract liquidity_lockbox {
     address public constant orca = address"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
     address public pool;
     address public pdaProgram;
@@ -23,8 +25,8 @@ contract nft_token {
     bytes public constant pdaProgramSeed = "pdaProgram";
     // Program PDA bump
     bytes1 public pdaBump;
-    int32 public constant min_tick_lower_index = -443632;
-    int32 public constant max_tick_lower_index = 443632;
+    int32 public constant minTickLowerIndex = -443632;
+    int32 public constant maxTickLowerIndex = 443632;
 
     // Total number of token accounts (even those that hold no positions anymore)
     uint64 public numPositionAccounts;
@@ -49,7 +51,7 @@ contract nft_token {
         pdaBridgedTokenAccount = _pdaBridgedTokenAccount;
 
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(nft_token).program_id);
+        (address pda, bytes1 bump) = try_find_program_address(["pdaProgram"], type(liquidity_lockbox).program_id);
 
         // Verify that the bump passed to the constructor matches the bump derived from the seeds and programId
         if (bump != _bump) {
@@ -64,11 +66,16 @@ contract nft_token {
     function _getPositionData(AccountInfo position, address positionMint) internal view returns (Position positionData) {
         positionData = Position({
             whirlpool: position.data.readAddress(8),
-            position_mint: position.data.readAddress(40),
+            positionMint: position.data.readAddress(40),
             liquidity: position.data.readUint128LE(72),
-            tick_lower_index: position.data.readInt32LE(88),
-            tick_upper_index: position.data.readInt32LE(92)
+            tickLowerIndex: position.data.readInt32LE(88),
+            tickUpperIndex: position.data.readInt32LE(92)
         });
+
+        // Check that the liquidity is within uint64 bounds
+        if (positionData.liquidity > type(uint64).max) {
+            revert("Liquidity overflow");
+        }
 
         // Check the whirlpool
         if (positionData.whirlpool != pool) {
@@ -76,12 +83,12 @@ contract nft_token {
         }
 
         // Check the NFT address
-        if (positionData.position_mint != positionMint) {
+        if (positionData.positionMint != positionMint) {
             revert("Wrong NFT address");
         }
 
         // Check tick values
-        if (positionData.tick_lower_index != min_tick_lower_index || positionData.tick_upper_index != max_tick_lower_index) {
+        if (positionData.tickLowerIndex != minTickLowerIndex || positionData.tickUpperIndex != maxTickLowerIndex) {
             revert("Wrong ticks");
         }
 
@@ -97,7 +104,7 @@ contract nft_token {
         }
 
         // Check the PDA address correctness
-        (address pdaPosition, ) = try_find_program_address(["position", positionData.position_mint], orca);
+        (address pdaPosition, ) = try_find_program_address(["position", positionData.positionMint], orca);
         if (pdaPosition != position.key) {
             revert("Wrong position PDA");
         }
@@ -116,8 +123,24 @@ contract nft_token {
         // Get the position data based on provided accounts
         Position positionData = _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
 
-        // TODO: Do the liquidity check for max(uint64) value as it is provided as uint128 from the LP provider
         uint64 positionLiquidity = uint64(positionData.liquidity);
+
+        // Check that the mint of the user position ATA matches the position mint
+        address positionMint = tx.accounts.userPositionAccount.data.readAddress(0);
+        if (positionMint != tx.accounts.positionMint.key) {
+            revert("Wrong user position ATA");
+        }
+
+        // Check that the bridged token mint account is correct
+        if (tx.accounts.bridgedTokenMint.key != bridgedTokenMint) {
+            revert("Wrong bridged token mint account");
+        }
+
+        // PDA position account owner must be the PDA program account
+        address pdaPositionOwner = tx.accounts.pdaPositionAccount.data.readAddress(32);
+        if (pdaPositionOwner != pdaProgram) {
+            revert("Wrong PDA position owner");
+        }
 
         // Transfer the position NFT to the pdaPositionAccount address of this program
         SplToken.transfer(
@@ -142,39 +165,6 @@ contract nft_token {
         mapPositionAccountPdaAta[positionAddress] = pdaPositionAta;
         positionAccounts[numPositionAccounts] = positionAddress;
         numPositionAccounts++;
-    }
-
-    @mutableAccount(whirlpool)
-    @account(token_program)
-    @signer(positionAuthority)
-    @mutableAccount(position)
-    @account(positionTokenAccount)
-    @mutableAccount(tokenOwnerAccountA)
-    @mutableAccount(tokenOwnerAccountB)
-    @mutableAccount(tokenVaultA)
-    @mutableAccount(tokenVaultB)
-    @mutableAccount(tickArrayLower)
-    @mutableAccount(tickArrayUpper)
-    // Transfer with PDA
-    function decreaseLiquidity(uint128 amount, uint64 minA, uint64 minB) external {
-        // Decrease the position liquidity
-        AccountMeta[11] metasDecreaseLiquidity = [
-        AccountMeta({pubkey: tx.accounts.whirlpool.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.token_program.key, is_writable: false, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.positionAuthority.key, is_writable: false, is_signer: true}),
-        AccountMeta({pubkey: tx.accounts.position.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.positionTokenAccount.key, is_writable: false, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountA.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenOwnerAccountB.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenVaultA.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tokenVaultB.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tickArrayLower.key, is_writable: true, is_signer: false}),
-        AccountMeta({pubkey: tx.accounts.tickArrayUpper.key, is_writable: true, is_signer: false})
-        ];
-        // a026d06f685b2c01 - decreaseLiquidity, eff0ae00000000000000000000000000 - amount, aaf1950200000000 - minA, b8522d0000000000 - minB
-        //bytes bincode = "0xa026d06f685b2c01eff0ae00000000000000000000000000aaf1950200000000b8522d0000000000";
-        //orca.call{accounts: metasDecreaseLiquidity}(bincode);
-        whirlpool.decreaseLiquidity{accounts: metasDecreaseLiquidity}(amount, minA, minB);
     }
 
     @mutableAccount(pool)
@@ -214,7 +204,7 @@ contract nft_token {
 
         // Check the requested amount to be smaller or equal than the position liquidity
         if (amount > positionLiquidity) {
-            revert("Amount exceeds the position liquidity");
+            revert("Amount exceeds a position liquidity");
         }
 
         // Check the pdaBridgedTokenAccount address
@@ -308,9 +298,11 @@ contract nft_token {
         return _getPositionData(tx.accounts.position, tx.accounts.positionMint.key);
     }
 
-    function getLiquidityAmountsAndPositions(uint64 amount) external view returns (uint64[], address[], address[]) {
+    function getLiquidityAmountsAndPositions(uint64 amount)
+        external view returns (uint64[] positionAmounts, address[] positionAddresses, address[]positionPdaAtas)
+    {
         uint64 totalLiquidity = 0;
-        uint64 numPositions = 0;
+        uint32 numPositions = 0;
         uint64 amountLeft = amount;
 
         // Get the number of allocated positions
@@ -327,9 +319,9 @@ contract nft_token {
         }
 
         // Allocate the necessary arrays and fill the values
-        address[] positionAddresses = new address[](numPositions);
-        uint64[] positionAmounts = new uint64[](numPositions);
-        address[] positionPdaAtas = new address[](numPositions);
+        positionAddresses = new address[](numPositions);
+        positionAmounts = new uint64[](numPositions);
+        positionPdaAtas = new address[](numPositions);
         for (uint64 i = 0; i < numPositions; ++i) {
             positionAddresses[i] = positionAccounts[firstAvailablePositionAccountIndex + i];
             positionAmounts[i] = mapPositionAccountLiquidity[positionAddresses[i]];
