@@ -18,7 +18,7 @@ struct Position {
 /// @dev The liquidity in the position cannot be practically bigger than the max of uint64 since
 ///      spl token functions are limited by the uint64 value.
 
-@program_id("GUGGHzwC8wEKY3g7QS38YmoS8t5Q2faWAGAfxDK2bXbb")
+@program_id("FKZ8VuHDGVKExF8HXbbFmLMRnvwrdYgh8WCYTgF7bZ6n")
 contract liquidity_lockbox {
     // Orca whirlpool program address
     address public constant orca = address"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
@@ -36,8 +36,8 @@ contract liquidity_lockbox {
     bytes public constant pdaProgramSeed = "pdaProgram";
     // Program PDA bump
     bytes1 public pdaBump;
-    int32 public constant minTickLowerIndex = -443632;
-    int32 public constant maxTickLowerIndex = 443632;
+    int32 public constant minTickLowerIndex = -45056;
+    int32 public constant maxTickLowerIndex = -33792;
 
     // Total number of token accounts (even those that hold no positions anymore)
     uint32 public numPositionAccounts;

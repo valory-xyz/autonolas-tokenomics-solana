@@ -12,8 +12,10 @@ test_position = "4fujZhdXYV57NzNUhHcAibK59fYRXKb4NpM4g5SCU8tw"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "https://api.devnet.solana.com"
 wallet = "artifacts/id.json"
+#cluster = "Localnet"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/liquidity_lockbox.ts"
+testdev = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/dev_lockbox.ts"

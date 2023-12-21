@@ -54,6 +54,57 @@ The issue is described here: [CPI issue](https://github.com/hyperledger/solang/i
 
 For the moment, the `withdraw()` function testing is wrapped into a `try-catch` logic.
 
+## Deployment
+The deployment procedure is described for the devnet.
+
+Set the RPC URL of a network where the program is deployed:
+```
+solana config set --url https://api.devnet.solana.com
+```
+
+Set the deployer keypair, for example:
+```
+solana config set --keypair artifacts/id.json
+```
+
+Check the balance:
+```
+solana balance
+```
+
+Request the airdrop:
+```
+solana airdrop 5
+```
+
+Swap dev SOL for dev USDC here: [nebula](https://everlastingsong.github.io/nebula/)
+
+Make sure the `program_id` in the contract matches the `liquidity_lockbox` with the anchor command:
+```
+anchor keys list
+```
+
+If they don't match, use the one output by anchor and overwrite the `program_id`, then recompile the code:
+```
+anchor build
+```
+
+Deploy the program:
+```
+solana program deploy --url https://api.devnet.solana.com -v --program-id target/deploy/liquidity_lockbox-keypair.json target/deploy/liquidity_lockbox.so
+```
+
+Run the script that increases the LP liquidity, initializes the program, deposits and withdraws:
+```
+anchor run testdev
+```
+
+To close the program and withdraw all lamports:
+```
+solana program close program_id_address --bypass-warning
+```
+
+
 ## Acknowledgements
 The liquidity lockbox contracts were inspired and based on the following sources:
 - [Solang](https://github.com/hyperledger/solang);

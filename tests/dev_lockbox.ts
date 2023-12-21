@@ -1,7 +1,7 @@
+import * as idl from "../target/idl/liquidity_lockbox.json";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { LiquidityLockbox } from "../target/types/liquidity_lockbox";
-import { TestPosition } from "../target/types/test_position";
 import { createMint, mintTo, transfer, getOrCreateAssociatedTokenAccount, unpackAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import {
   WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID,
@@ -12,23 +12,26 @@ import { DecimalUtil, Percentage } from "@orca-so/common-sdk";
 import Decimal from "decimal.js";
 import expect from "expect";
 
-describe("Liquidity Lockbox", () => {
+describe("Devnet Liquidity Lockbox", () => {
   // Configure the client to use the local cluster.
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   console.log("Provider wallet:", provider.wallet.payer.publicKey.toBase58());
-  const program = anchor.workspace.LiquidityLockbox as Program<LiquidityLockbox>;
-  const positionProgram = anchor.workspace.TestPosition as Program<TestPosition>;
+  const PROGRAM_ID = new anchor.web3.PublicKey("FKZ8VuHDGVKExF8HXbbFmLMRnvwrdYgh8WCYTgF7bZ6n");
+  const program = new Program(idl as anchor.Idl, PROGRAM_ID, anchor.getProvider()) as Program<LiquidityLockbox>;
 
   const orca = new anchor.web3.PublicKey("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
-  const whirlpool = new anchor.web3.PublicKey("7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm");
+  const whirlpool = new anchor.web3.PublicKey("3KBZiL2g8C7tiJ32hTv5v3KM7aK9htpqTw4cTXz1HvPt");
   const sol = new anchor.web3.PublicKey("So11111111111111111111111111111111111111112");
-  const usdc = new anchor.web3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-  const tokenVaultA = new anchor.web3.PublicKey("9RfZwn2Prux6QesG1Noo4HzMEBv3rPndJ2bN2Wwd6a7p");
-  const tokenVaultB = new anchor.web3.PublicKey("BVNo8ftg2LkkssnWT4ZWdtoFaevnfD6ExYeramwM27pe");
-  const tickArrayLower = new anchor.web3.PublicKey("DJBLVHo3uTQBYpSHbVdDq8LoRsSiYV9EVhDUguXszvCi");
-  const tickArrayUpper = new anchor.web3.PublicKey("ZPyVkTuj9TBr1ER4Fnubyz1w7bm5LsXctLiZb8Fs2Do");
+  const usdc = new anchor.web3.PublicKey("BRjpCHtyQLNCo8gqRUr8jtdAj5AjPYQaoqbvcZiHok1k");
+  const tokenVaultA = new anchor.web3.PublicKey("C9zLV5zWF66j3rZj3uuhDqvfuA8esJyWnruGzDW9qEj2");
+  const tokenVaultB = new anchor.web3.PublicKey("DM3RMz2yzUB8yPRQM3FMZgdFrwZGMsabsfsKopWktoX");
+  const tickArrayLower = new anchor.web3.PublicKey("3aBJJLAR3QxGcGsesNXeW3f64Rv3TckF7EQ6sXtAuvGM");
+  const tickArrayUpper = new anchor.web3.PublicKey("CpoSFo3ajrizueggtJr2ZjvYgdtkgugXtvhqcwkyCkKP");
+  const positionMint = new anchor.web3.PublicKey("B8Rwg66RcJfNvXyEfgfLAGGzsgQHzjQUzYnk47XqDnb9");
+
+  const initialize = false;
 
   it("Adding liquidity to the Lockbox in exchange of tokens and decreasing it when getting tokens back", async () => {
     // User wallet is the provider payer
@@ -48,8 +51,8 @@ describe("Liquidity Lockbox", () => {
       const usdc_amount = DecimalUtil.toBN(new Decimal("10" /* usdc */), 6);
       const slippage = Percentage.fromFraction(10, 1000); // 1%
       // Full range price
-      const lower_tick_index = -443632;
-      const upper_tick_index = 443632;
+      const lower_tick_index = -45056;
+      const upper_tick_index = -33792;
 
       // Adjust price range (not all prices can be set, only a limited number of prices are available for range specification)
       // (prices corresponding to InitializableTickIndex are available)
@@ -63,6 +66,7 @@ describe("Liquidity Lockbox", () => {
         PriceMath.tickIndexToPrice(upper_tick_index, token_a.decimals, token_b.decimals).toFixed(token_b.decimals)
       );
 
+    if (initialize) {
       // Obtain deposit estimation
       let quote = increaseLiquidityQuoteByInputTokenWithParams({
         // Pass the pool definition and state
@@ -93,14 +97,17 @@ describe("Liquidity Lockbox", () => {
       );
 
       // Send the transaction to open a position
-      let signature = await open_position_tx.tx.buildAndExecute();
-      console.log("signature:", signature);
+      let signature2 = await open_position_tx.tx.buildAndExecute();
+      console.log("signature:", signature2);
       console.log("position NFT:", open_position_tx.positionMint.toBase58());
       const positionMint = open_position_tx.positionMint;
 
       // Wait for the transaction to complete
       let latest_blockhash = await ctx.connection.getLatestBlockhash();
-      await ctx.connection.confirmTransaction({signature, ...latest_blockhash}, "confirmed");
+      await ctx.connection.confirmTransaction({signature2, ...latest_blockhash}, "confirmed");
+      return;
+    }
+
 
     // Find a PDA account for the program
     const [pdaProgram, bump] = await anchor.web3.PublicKey.findProgramAddress([Buffer.from("pdaProgram", "utf-8")], program.programId);
@@ -122,28 +129,12 @@ describe("Liquidity Lockbox", () => {
     );
     console.log("PDA ATA for bridged token:", pdaBridgedTokenAccount.address.toBase58());
 
-    // Try to deploy the program with incorrect seed
-    try {
-        signature = await program.methods
-          .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes + "1")
-          .accounts({ dataAccount: pdaProgram })
-          .rpc();
-    } catch (error) {}
-
     // Deploy the LiquidityLockbox program
-    try {
-        signature = await program.methods
+    let signature = await program.methods
           .new(whirlpool, bridgedTokenMint, pdaBridgedTokenAccount.address, bumpBytes)
           .accounts({ dataAccount: pdaProgram })
           .rpc();
-    } catch (error) {
-        if (error instanceof Error && "message" in error) {
-            console.error("Program Error:", error);
-            console.error("Error Message:", error.message);
-        } else {
-            console.error("Transaction Error:", error);
-        }
-    }
+
     //console.log("Your transaction signature", signature);
     // Wait for program creation confirmation
     await provider.connection.confirmTransaction({
@@ -249,7 +240,7 @@ describe("Liquidity Lockbox", () => {
     console.log("\tupper:", data.tickUpperIndex, upper_price.toFixed(token_b.decimals));
     console.log("\tamountA:", DecimalUtil.fromBN(amounts.tokenA, token_a.decimals).toString());
     console.log("\tamountB:", DecimalUtil.fromBN(amounts.tokenB, token_b.decimals).toString());
-return;
+
 //  // Test decrease liquidity with the SDK
 //  // Set the percentage of liquidity to be withdrawn (30%)
 //  const delta_liquidity = data.liquidity.mul(new anchor.BN(30)).div(new anchor.BN(100));
@@ -289,79 +280,9 @@ return;
 
     // ############################## DEPOSIT ##############################
     console.log("\nSending position NFT to the program in exchange of bridged tokens");
-
-    const positionDataAccount = anchor.web3.Keypair.generate();
-
-    // Create pseudo-position corresponding to the NFT
-    await positionProgram.methods
-      .new(whirlpool, positionMint)
-      .accounts({ dataAccount: positionDataAccount.publicKey })
-      .signers([positionDataAccount])
-      .rpc();
-
-    // Try to lock a position with a wrong position data account
-    try {
-        signature = await program.methods.deposit()
-          .accounts(
-              {
-                dataAccount: pdaProgram,
-                userPositionAccount: userPositionAccount.address,
-                pdaPositionAccount: pdaPositionAccount.address,
-                userBridgedTokenAccount: userBridgedTokenAccount.address,
-                bridgedTokenMint: bridgedTokenMint,
-                position: positionDataAccount.publicKey,
-                positionMint: positionMint,
-                userWallet: userWallet.publicKey
-              }
-          )
-          .signers([userWallet])
-          .rpc();
-    } catch (error) {}
-
-    // Try to pass another user ATA with a mint that is different from the position mint
-    try {
-        signature = await program.methods.deposit()
-          .accounts(
-              {
-                dataAccount: pdaProgram,
-                userPositionAccount: userTokenAccountA.address,
-                pdaPositionAccount: pdaPositionAccount.address,
-                userBridgedTokenAccount: userBridgedTokenAccount.address,
-                bridgedTokenMint: bridgedTokenMint,
-                position: position.publicKey,
-                positionMint: positionMint,
-                userWallet: userWallet.publicKey
-              }
-          )
-          .signers([userWallet])
-          .rpc();
-    } catch (error) {}
-
-    // Try to pass user position ATA instead of the PDA position ATA
-    try {
-        signature = await program.methods.deposit()
-          .accounts(
-              {
-                dataAccount: pdaProgram,
-                userPositionAccount: userPositionAccount,
-                pdaPositionAccount: userPositionAccount,
-                userBridgedTokenAccount: userBridgedTokenAccount.address,
-                bridgedTokenMint: bridgedTokenMint,
-                position: position.publicKey,
-                positionMint: positionMint,
-                userWallet: userWallet.publicKey
-              }
-          )
-          .signers([userWallet])
-          .rpc();
-    } catch (error) {}
-
-//    accountInfo = await provider.connection.getAccountInfo(pdaPositionAccount.address);
-//    console.log(accountInfo);
-
     // Execute the correct deposit tx
     try {
-        signature = await program.methods.deposit()
+        const signature = await program.methods.deposit()
           .accounts(
               {
                 dataAccount: pdaProgram,
@@ -376,6 +297,13 @@ return;
           )
           .signers([userWallet])
           .rpc();
+
+        console.log("Deposit tx signature", signature);
+        // Wait for program creation confirmation
+        await provider.connection.confirmTransaction({
+            signature: signature,
+            ...(await provider.connection.getLatestBlockhash()),
+        });
     } catch (error) {
         if (error instanceof Error && "message" in error) {
             console.error("Program Error:", error);
@@ -384,13 +312,6 @@ return;
             console.error("Transaction Error:", error);
         }
     }
-
-    console.log("Deposit tx signature", signature);
-    // Wait for program creation confirmation
-    await provider.connection.confirmTransaction({
-        signature: signature,
-        ...(await provider.connection.getLatestBlockhash()),
-    });
 
     balance = await program.methods.getBalance()
       .accounts({account: pdaPositionAccount.address})
@@ -417,48 +338,10 @@ return;
     // ############################## WITHDRAW ##############################
     console.log("\nSending bridged tokens back to the program in exchange of the NFT");
 
-    // Transfer bridged tokens from the user to the program, decrease the position and send tokens back to the user
+    // Execute the correct withdraw tx
     const tBalalnce = new anchor.BN("20000000");
-    // Get the data for tBalance
-    const result = await program.methods.getLiquidityAmountsAndPositions(tBalalnce)
-      .accounts({dataAccount: pdaProgram})
-      .view();
-    // Check the addresses
-    expect(position.publicKey).toEqual(result.positionAddresses[0]);
-    expect(pdaPositionAccount.address).toEqual(result.positionPdaAtas[0]);
-
-    // Try to execute the withdraw with the incorrect position address
     try {
         const signature = await program.methods.withdraw(tBalalnce)
-          .accounts(
-              {
-                dataAccount: pdaProgram,
-                whirlpool_programId: orca,
-                pool: whirlpool,
-                tokenProgramId: TOKEN_PROGRAM_ID,
-                position: userBridgedTokenAccount.address,
-                userBridgedTokenAccount: userBridgedTokenAccount.address,
-                pdaBridgedTokenAccount: pdaBridgedTokenAccount.address,
-                userWallet: userWallet.publicKey,
-                bridgedTokenMint: bridgedTokenMint,
-                pdaPositionAccount: pdaPositionAccount.address,
-                userTokenAccountA: userTokenAccountA.address,
-                userTokenAccountB: userTokenAccountB.address,
-                tokenVaultA: tokenVaultA,
-                tokenVaultB: tokenVaultB,
-                tickArrayLower: tickArrayLower,
-                tickArrayUpper: tickArrayUpper,
-                positionMint: positionMint,
-                sig: userWallet.publicKey
-              }
-          )
-          .signers([userWallet])
-          .rpc();
-    } catch (error) {}
-
-    // Execute the correct withdraw tx
-    try {
-        signature = await program.methods.withdraw(tBalalnce)
           .accounts(
               {
                 dataAccount: pdaProgram,
@@ -483,6 +366,7 @@ return;
           )
           .signers([userWallet])
           .rpc();
+    console.log("Withdraw tx signature", signature);
     } catch (error) {
         if (error instanceof Error && "message" in error) {
             console.error("Program Error:", error);
@@ -491,7 +375,6 @@ return;
             console.error("Transaction Error:", error);
         }
     }
-    console.log("Withdraw tx signature", signature);
 
 //    balance = await program.methods.getBalance()
 //      .accounts({account: pdaBridgedTokenAccount.address})
